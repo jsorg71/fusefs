@@ -36,6 +36,8 @@ pub fn build(b: *std.Build) !void
     fusefsc.linkLibC();
     fusefsc.addIncludePath(b.path("src"));
     fusefsc.addCSourceFiles(.{.files = libtomlc_files});
+    fusefsc.addCSourceFiles(.{.files = myfuse_files});
+    fusefsc.linkSystemLibrary("fuse3");
     fusefsc.root_module.addImport("hexdump", b.createModule(.{
         .root_source_file = b.path("common/hexdump.zig"),
     }));
@@ -124,4 +126,8 @@ fn update_git_zig(allocator: std.mem.Allocator) !void
 
 const libtomlc_files = &.{
     "src/toml.c",
+};
+
+const myfuse_files = &.{
+    "src/myfuse.c",
 };
