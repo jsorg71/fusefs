@@ -43,21 +43,54 @@ void cb_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi);
 void cb_releasedir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi);
 void cb_statfs(fuse_req_t req, fuse_ino_t ino);
 
+#define CHECK_FIELD(_field, _no) do { \
+    memset(&fi, 0, sizeof(fi)); fi._field = 1; \
+    memcpy(&mfi, &fi, sizeof(fi)); \
+    ok = ok && (mfi.padding == (_no)); } while (0)
+
+//*****************************************************************************
+// test myfuse_file_info mtches fuse_file_info
+static int
+test_file_info(void)
+{
+    int ok;
+    struct myfuse_file_info mfi;
+    struct fuse_file_info fi;
+
+    ok = sizeof(fi) == sizeof(mfi);
+    CHECK_FIELD(writepage,              1 << 0);
+    CHECK_FIELD(direct_io,              1 << 1);
+    CHECK_FIELD(keep_cache,             1 << 2);
+    CHECK_FIELD(flush,                  1 << 3);
+    CHECK_FIELD(nonseekable,            1 << 4);
+    CHECK_FIELD(flock_release,          1 << 5);
+    CHECK_FIELD(cache_readdir,          1 << 6);
+    CHECK_FIELD(noflush,                1 << 7);
+    CHECK_FIELD(parallel_direct_writes, 1 << 8);
+    return ok;
+}
+
 //*****************************************************************************
 // return 0 = ok
 //        1 = alloc failed
 //        2 = fuse_session_new failed
 //        3 = fuse_session_mount failed
+//        4 = tests fail
 int
 myfuse_create(const char* mountpoint, void* user, void** obj)
 {
-    int rv = 1;
-    struct myfuse_info* mi = (struct myfuse_info*)
-            calloc(1, sizeof(struct myfuse_info));
+    int rv;
+    struct myfuse_info* mi;
+
+    if (!test_file_info())
+    {
+        return 4;
+    }
+    rv = 1;
+    mi = (struct myfuse_info*)calloc(1, sizeof(struct myfuse_info));
     if (mi != NULL)
     {
         fuse_opt_add_arg(&mi->args, "./fusefsc");
-        //mi->user = user;
         // assign callbacks
         mi->ops.lookup      = cb_lookup;
         mi->ops.readdir     = cb_readdir;
@@ -103,7 +136,9 @@ myfuse_create(const char* mountpoint, void* user, void** obj)
 int
 myfuse_delete(void* obj)
 {
-    struct myfuse_info* mi = (struct myfuse_info*)obj;
+    struct myfuse_info* mi;
+
+    mi = (struct myfuse_info*)obj;
     if (mi == NULL)
     {
         return 0;
@@ -119,21 +154,38 @@ myfuse_delete(void* obj)
 //*****************************************************************************
 int
 myfuse_get_fds(void* obj,
-        int* rfds, size_t* num_rfds,
-        int* wfds, size_t* num_wfds,
+        int* rfds, size_t max_rfds, size_t* num_rfds,
+        int* wfds, size_t max_wfds, size_t* num_wfds,
         int* timeout)
 {
-    struct myfuse_info* mi = (struct myfuse_info*)obj;
-    int fd = fuse_session_fd(mi->se);
+    struct myfuse_info* mi;
+    int fd;
+    size_t lnum_rfds;
+
+    (void)timeout;
+    (void)wfds;
+    (void)max_wfds;
+    (void)num_wfds;
+
+    mi = (struct myfuse_info*)obj;
+    if (mi == NULL)
+    {
+        return 1;
+    }
+    fd = fuse_session_fd(mi->se);
     if (fd >= 0)
     {
-        size_t lnum_rfds = *num_rfds;
+        lnum_rfds = *num_rfds;
+        if (lnum_rfds >= max_rfds)
+        {
+            return 2;
+        }
         rfds[lnum_rfds] = fd;
         lnum_rfds++;
         *num_rfds = lnum_rfds;
         return 0;
     }
-    return 1;
+    return 3;
 }
 
 //*****************************************************************************
