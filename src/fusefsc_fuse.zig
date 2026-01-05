@@ -20,14 +20,6 @@ pub const FuseError = error
     FuseOtherFailed,
 };
 
-const out_data_t = struct
-{
-    size: usize = 0,
-    sent: usize = 0,
-    sout: *parse.parse_t,
-    next: ?*out_data_t = null,
-};
-
 //*****************************************************************************
 inline fn err_if(b: bool, err: FuseError) !void
 {
@@ -48,15 +40,42 @@ fn cb_error_int(src: std.builtin.SourceLocation, err: anyerror,
     return rv;
 }
 
+const sout_info_t = struct
+{
+    out_data_slice: [64 * 1024]u8 = undefined,
+    msg_size: usize = 0,
+    sent: usize = 0,
+    next: ?*sout_info_t = null,
+
+    //*************************************************************************
+    fn init(self: *sout_info_t) !void
+    {
+        //try log.logln(log.LogLevel.info, @src(),
+        //        "sout_info_t", .{});
+        self.* = .{};
+    }
+
+    //*************************************************************************
+    pub fn deinit(self: *sout_info_t) void
+    {
+        //log.logln(log.LogLevel.info, @src(),
+        //        "sout_info_t", .{}) catch return;
+        _ = self;
+    }
+
+};
+
 pub const fuse_session_t = struct
 {
     mi: ?*anyopaque = null,
-    out_head: ?*out_data_t = null,
-    out_tail: ?*out_data_t = null,
+    sout_head: ?*sout_info_t = null,
+    sout_tail: ?*sout_info_t = null,
 
     //*************************************************************************
     pub fn init(self: *fuse_session_t) !void
     {
+        try log.logln(log.LogLevel.info, @src(),
+                "fuse_session_t", .{});
         self.* = .{};
         const rv = c.myfuse_create("/home/jay/test_mount", self, &self.mi);
         try log.logln(log.LogLevel.info, @src(), "myfuse_create rv {}", .{rv});
@@ -73,29 +92,24 @@ pub const fuse_session_t = struct
     //*************************************************************************
     pub fn deinit(self: *fuse_session_t) void
     {
-        log.logln(log.LogLevel.info, @src(), "", .{}) catch return;
+        log.logln(log.LogLevel.info, @src(),
+                "fuse_session_t", .{}) catch return;
         _ = c.myfuse_delete(self.mi);
         // delete any not sent messages
-        while (self.out_head) |aout_head|
+        while (self.sout_head) |asout_info|
         {
             //log.logln(log.LogLevel.info, @src(), "cleanup item", .{}) catch return;
-            self.out_head = aout_head.next;
+            self.sout_head = asout_info.next;
             //_ = c.fuse_reply_err(req, c.ENOENT);
-            aout_head.sout.delete();
-            g_allocator.destroy(aout_head);
+            asout_info.deinit();
+            g_allocator.destroy(asout_info);
         }
     }
 
     //*************************************************************************
-    pub fn get_fds(self: *fuse_session_t,
-            rfds: []i32, num_rfds: *usize,
-            wfds: []i32, num_wfds: *usize,
-            timeout: *i32) !void
+    pub fn get_fds(self: *fuse_session_t, fd: *i32) !void
     {
-        const rv = c.myfuse_get_fds(self.mi,
-                rfds.ptr, rfds.len, num_rfds,
-                wfds.ptr, wfds.len, num_wfds,
-                timeout);
+        const rv = c.myfuse_get_fds(self.mi, fd);
         if (rv != 0)
         {
             try log.logln(log.LogLevel.info, @src(),
@@ -115,6 +129,61 @@ pub const fuse_session_t = struct
     }
 
     //*************************************************************************
+    fn append_sout(self: *fuse_session_t, sout_info: *sout_info_t) !void
+    {
+        if (self.sout_tail) |asout_info|
+        {
+            asout_info.next = sout_info;
+            self.sout_tail = sout_info;
+        }
+        else
+        {
+            self.sout_head = sout_info;
+            self.sout_tail = sout_info;
+        }
+    }
+
+    //*************************************************************************
+    fn process_reply_err(self: *fuse_session_t, code: u16, size: u16,
+            sin: *parse.parse_t) !void
+    {
+        _ = self;
+        try log.logln(log.LogLevel.info, @src(), "code {} size {}", .{code, size});
+        try sin.check_rem(8 + 4);
+        const req = sin.in_u64_le();
+        const ierr = sin.in_i32_le();
+        const req_ptr: *c.struct_fuse_req = @ptrFromInt(req);
+        //try log.logln(log.LogLevel.info, @src(), "req [0x{X}] ierr {}", .{req, ierr});
+        _ = c.fuse_reply_err(req_ptr, ierr);
+        //try log.logln(log.LogLevel.info, @src(), "req [{*}]", .{req_ptr});
+    }
+
+    //*************************************************************************
+    fn process_other(self: *fuse_session_t, code: u16, size: u16,
+            sin: *parse.parse_t) !void
+    {
+        _ = self;
+        _ = sin;
+        try log.logln(log.LogLevel.info, @src(), "code {} size {}", .{code, size});
+    }
+    //*************************************************************************
+    pub fn process_msg(self: *fuse_session_t, in_data_slice: []u8) !void
+    {
+        //try log.logln(log.LogLevel.info, @src(), "", .{});
+        const sin = try parse.parse_t.create_from_slice(&g_allocator,
+                in_data_slice);
+        defer sin.delete();
+        try sin.check_rem(4);
+        const code = sin.in_u16_le();
+        const size = sin.in_u16_le();
+        return switch (code)
+        {
+            10 => self.process_reply_err(code, size, sin),
+            else => self.process_other(code, size, sin),
+        };
+    }
+
+    //*************************************************************************
     // * Valid replies:
     // *   fuse_reply_entry
     // *   fuse_reply_err
@@ -129,6 +198,36 @@ pub const fuse_session_t = struct
                 try log.logln(log.LogLevel.info, @src(),
                         "self [0x{X}] req [0x{X}] parent [0x{X}] name [{s}]",
                         .{@intFromPtr(self), @intFromPtr(areq), parent, str});
+                // create sout_info
+                const sout_info = try g_allocator.create(sout_info_t);
+                errdefer g_allocator.destroy(sout_info);
+                try sout_info.init();
+                errdefer sout_info.deinit();
+                // create a temp parse
+                const sout = try parse.parse_t.create_from_slice(
+                        &g_allocator, &sout_info.out_data_slice);
+                defer sout.delete();
+                // header, skip and set later
+                try sout.check_rem(4);
+                sout.push_layer(4, 0);
+                // req, parent
+                try sout.check_rem(8 + 8);
+                sout.out_u64_le(@intFromPtr(areq));
+                sout.out_u64_le(parent);
+                // string
+                try sout.check_rem(2 + str.len);
+                sout.out_u16_le(@intCast(str.len));
+                sout.out_u8_slice(str);
+                sout.push_layer(0, 1);
+                sout.pop_layer(0);
+                // header
+                sout.out_u16_le(1); // code
+                const size = sout.layer_subtract(1, 0);
+                sout.out_u16_le(size);
+                sout_info.msg_size = size;
+                // add to linked list
+                try self.append_sout(sout_info);
+                return;
             }
         }
         _ = c.fuse_reply_err(req, c.ENOENT);
@@ -349,13 +448,20 @@ pub const fuse_session_t = struct
                         "self [0x{X}] req [0x{X}] ino [0x{X}] mfi.flags [0x{X}]",
                         .{@intFromPtr(self), @intFromPtr(areq), ino,
                         mfi.flags});
-                const sout = try parse.parse_t.create(&g_allocator, 128);
-                errdefer sout.delete();
+                // create sout_info
+                const sout_info = try g_allocator.create(sout_info_t);
+                errdefer g_allocator.destroy(sout_info);
+                try sout_info.init();
+                errdefer sout_info.deinit();
+                // create a temp parse
+                const sout = try parse.parse_t.create_from_slice(
+                        &g_allocator, &sout_info.out_data_slice);
+                defer sout.delete();
                 // header, skip and set later
                 try sout.check_rem(4);
                 sout.push_layer(4, 0);
                 // req, ino
-                try sout.check_rem(16);
+                try sout.check_rem(8 + 8);
                 sout.out_u64_le(@intFromPtr(areq));
                 sout.out_u64_le(ino);
                 // fuse_file_info
@@ -377,20 +483,9 @@ pub const fuse_session_t = struct
                 sout.out_u16_le(15); // code
                 const size = sout.layer_subtract(1, 0);
                 sout.out_u16_le(size);
+                sout_info.msg_size = size;
                 // add to linked list
-                const out_data = try g_allocator.create(out_data_t);
-                errdefer g_allocator.destroy(out_data);
-                out_data.* = .{.sout = sout, .size = size};
-                if (self.out_tail) |aout_tail|
-                {
-                    aout_tail.next = out_data;
-                    self.out_tail = out_data;
-                }
-                else
-                {
-                    self.out_head = out_data;
-                    self.out_tail = out_data;
-                }
+                try self.append_sout(sout_info);
                 return;
             }
         }

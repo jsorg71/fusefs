@@ -34,10 +34,7 @@ myfuse_create(const char* mountpoint, void* user, void** obj);
 int
 myfuse_delete(void* obj);
 int
-myfuse_get_fds(void* obj,
-        int* rfds, size_t max_rfds, size_t* num_rfds,
-        int* wfds, size_t max_wfds, size_t* num_wfds,
-        int* timeout);
+myfuse_get_fds(void* obj, int* fd);
 int
 myfuse_check_fds(void* obj);
 

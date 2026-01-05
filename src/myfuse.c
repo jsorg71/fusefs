@@ -153,50 +153,40 @@ myfuse_delete(void* obj)
 
 //*****************************************************************************
 int
-myfuse_get_fds(void* obj,
-        int* rfds, size_t max_rfds, size_t* num_rfds,
-        int* wfds, size_t max_wfds, size_t* num_wfds,
-        int* timeout)
+myfuse_get_fds(void* obj, int* fd)
 {
     struct myfuse_info* mi;
-    int fd;
-    size_t lnum_rfds;
-
-    (void)timeout;
-    (void)wfds;
-    (void)max_wfds;
-    (void)num_wfds;
+    int lfd;
 
     mi = (struct myfuse_info*)obj;
     if (mi == NULL)
     {
         return 1;
     }
-    fd = fuse_session_fd(mi->se);
-    if (fd >= 0)
+    lfd = fuse_session_fd(mi->se);
+    if (lfd >= 0)
     {
-        lnum_rfds = *num_rfds;
-        if (lnum_rfds >= max_rfds)
-        {
-            return 2;
-        }
-        rfds[lnum_rfds] = fd;
-        lnum_rfds++;
-        *num_rfds = lnum_rfds;
+        *fd = lfd;
         return 0;
     }
-    return 3;
+    return 2;
 }
 
 //*****************************************************************************
 int
 myfuse_check_fds(void* obj)
 {
-    struct myfuse_info* mi = (struct myfuse_info*)obj;
-    int size = fuse_session_receive_buf(mi->se, &mi->buf);
-    if (size > 0)
+    int size;
+    struct myfuse_info* mi;
+
+    mi = (struct myfuse_info*)obj;
+    if (mi != NULL)
     {
-        fuse_session_process_buf(mi->se, &mi->buf);
+        size = fuse_session_receive_buf(mi->se, &mi->buf);
+        if (size > 0)
+        {
+            fuse_session_process_buf(mi->se, &mi->buf);
+        }
         return 0;
     }
     return 1;
