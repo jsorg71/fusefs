@@ -5,6 +5,7 @@ const hexdump = @import("hexdump");
 const parse = @import("parse");
 const git = @import("git.zig");
 const toml = @import("fusefss_toml.zig");
+const structs = @import("fusefss_structs.zig");
 const net = std.net;
 const posix = std.posix;
 
@@ -14,6 +15,10 @@ var g_deamonize: bool = false;
 var g_config_file: [128:0]u8 =
         .{'f', 'u', 's', 'e', 'f', 's', 's', '.', 't', 'o', 'm', 'l'} ++
         .{0} ** 116;
+
+const g_hello_str = "Hello World!\n";
+const g_hello_name = "hello";
+//const g_hello_name = "autorun.inf";
 
 pub const FusefssError = error
 {
@@ -93,6 +98,59 @@ const peer_info_t = struct
     }
 
     //*************************************************************************
+    fn send_reply_attr(self: *peer_info_t, req: u64, mstat: *structs.MyStat,-
+            attr_timeout: f64) !void
+    {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        const sout_info = try g_allocator.create(sout_info_t);
+        errdefer g_allocator.destroy(sout_info);
+        try sout_info.init();
+        errdefer sout_info.deinit();
+        const sout = try parse.parse_t.create_from_slice(&g_allocator,
+                &sout_info.out_data_slice);
+        defer sout.delete();
+        try sout.check_rem(4);
+        sout.push_layer(4, 0);
+        try sout.check_rem(8);
+        sout.out_u64_le(req);
+        try mstat.out(sout);
+        try sout.check_rem(8);
+        sout.out_f64_le(attr_timeout);
+        sout.push_layer(0, 1);
+        const out_size = sout.layer_subtract(1, 0);
+        sout.pop_layer(0);
+        sout.out_u16_le(2);
+        sout.out_u16_le(out_size);
+        sout_info.msg_size = out_size;
+        try self.append_sout(sout_info);
+    }
+
+    //*************************************************************************
+    fn send_reply_entry(self: *peer_info_t, req: u64, ep: *structs.MyEntryParam) !void
+    {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        const sout_info = try g_allocator.create(sout_info_t);
+        errdefer g_allocator.destroy(sout_info);
+        try sout_info.init();
+        errdefer sout_info.deinit();
+        const sout = try parse.parse_t.create_from_slice(&g_allocator,
+                &sout_info.out_data_slice);
+        defer sout.delete();
+        try sout.check_rem(4);
+        sout.push_layer(4, 0);
+        try sout.check_rem(8);
+        sout.out_u64_le(req);
+        try ep.out(sout);
+        sout.push_layer(0, 1);
+        const out_size = sout.layer_subtract(1, 0);
+        sout.pop_layer(0);
+        sout.out_u16_le(9);
+        sout.out_u16_le(out_size);
+        sout_info.msg_size = out_size;
+        try self.append_sout(sout_info);
+    }
+
+    //*************************************************************************
     fn send_reply_err(self: *peer_info_t, req: u64, ierr: i32) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
@@ -117,32 +175,97 @@ const peer_info_t = struct
         try self.append_sout(sout_info);
     }
 
+//        var fi: structs.MyFileInfo = .{};
+//        try fi.in(sin);
+
     //*************************************************************************
     fn process_lookup(self: *peer_info_t, code: u16, size: u16,
             sin: *parse.parse_t) !void
     {
-        try sin.check_rem(8);
+        try sin.check_rem(8 + 8 + 2);
         const req = sin.in_u64_le();
+        const parent = sin.in_u64_le();
+        const name_len = sin.in_u16_le();
+        try sin.check_rem(name_len);
+        const name_slice = sin.in_u8_slice(name_len);
         try log.logln(log.LogLevel.info, @src(),
-                "code {} size {}", .{code, size});
-        try self.send_reply_err(req, 2); // ENOENT
+                "code {} size {} parent [{}] name [{s}]",
+                .{code, size, parent, name_slice});
+        if (parent != 1 or !std.mem.eql(u8, name_slice, g_hello_name))
+        {
+            try self.send_reply_err(req, 2); // ENOENT
+        }
+        else
+        {
+            var ep: structs.MyEntryParam = .{};
+            ep.ino = 2;
+            ep.attr_timeout = 1.0;
+            ep.entry_timeout = 1.0;
+            ep.attr.st_mode = 0o0100000 | 0o0444; // S_IFREG
+            ep.attr.st_nlink = 1;
+            ep.attr.st_size = g_hello_str.len;
+            try self.send_reply_entry(req, &ep);
+        }
+    }
+
+    //*************************************************************************
+    fn process_getattr(self: *peer_info_t, code: u16, size: u16,
+            sin: *parse.parse_t) !void
+    {
+        try sin.check_rem(8 + 8 + 1);
+        const req = sin.in_u64_le();
+        const ino = sin.in_u64_le();
+        const got_fi = sin.in_u8();
+        var fi: structs.MyFileInfo = .{};
+        if (got_fi != 0)
+        {
+            try fi.in(sin);
+        }
+        try log.logln(log.LogLevel.info, @src(),
+                "code {} size {} req 0x{X} ino 0x{X} flags 0x{X} " ++
+                "padding 0x{X} fh 0x{X}",
+                .{code, size, req, ino, fi.flags, fi.padding, fi.fh});
+        
+        if (ino != 0 and ino != 1)
+        {
+            try self.send_reply_err(req, 2); // ENOENT
+        }
+        else
+        {
+            var stat: structs.MyStat = .{};
+            stat.st_ino = ino;
+            if (ino == 1)
+            {
+                stat.st_mode = 0o0040000 | 0o0755; // S_IFDIR | 0755;
+                stat.st_nlink = 2;
+            }
+            else if (ino == 2)
+            {
+                stat.st_mode = 0o0100000 | 0o0444; // S_IFREG | 0444;
+                stat.st_nlink = 2;
+                stat.st_size = g_hello_str.len;
+            }
+            try self.send_reply_attr(req, &stat, 1.0);
+        }
     }
 
     //*************************************************************************
     fn process_opendir(self: *peer_info_t, code: u16, size: u16,
             sin: *parse.parse_t) !void
     {
-        try sin.check_rem(8 + 8 + 4 + 4 + 8 + 8);
+        try sin.check_rem(8 + 8);
         const req = sin.in_u64_le();
         const ino = sin.in_u64_le();
-        const flags = sin.in_i32_le();
-        const padding = sin.in_u32_le();
-        sin.in_u8_skip(8);
-        const fh = sin.in_u64_le();
+        const got_fi = sin.in_u8();
+        var fi: structs.MyFileInfo = .{};
+        if (got_fi != 0)
+        {
+            try fi.in(sin);
+        }
         try log.logln(log.LogLevel.info, @src(),
                 "code {} size {} req 0x{X} ino 0x{X} flags 0x{X} " ++
                 "padding 0x{X} fh 0x{X}",
-                .{code, size, req, ino, flags, padding, fh});
+                .{code, size, req, ino, fi.flags, fi.padding, fi.fh});
         try self.send_reply_err(req, 2); // ENOENT
     }
 
@@ -168,6 +291,7 @@ const peer_info_t = struct
         try switch (code)
         {
             1 => self.process_lookup(code, size, sin),
+            13 => self.process_getattr(code, size, sin),
             15 => self.process_opendir(code, size, sin),
             else => self.process_other(code, size, sin),
         };
