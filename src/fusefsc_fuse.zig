@@ -216,12 +216,10 @@ pub const fuse_session_t = struct
     // }
 
     //*************************************************************************
-    fn process_reply_statfs(self: *fuse_session_t, code: u16, size: u16,
-            sin: *parse.parse_t) !void
+    fn process_reply_statfs(self: *fuse_session_t, sin: *parse.parse_t) !void
     {
         _ = self;
-        try log.logln(log.LogLevel.info, @src(),
-                "code {} size {}", .{code, size});
+        try log.logln(log.LogLevel.info, @src(), "", .{});
         try sin.check_rem(8);
         const req = sin.in_u64_le();
         var mstat: structs.MyStatVfs = .{};
@@ -233,12 +231,10 @@ pub const fuse_session_t = struct
     }
 
     //*************************************************************************
-    fn process_reply_attr(self: *fuse_session_t, code: u16, size: u16,
-            sin: *parse.parse_t) !void
+    fn process_reply_attr(self: *fuse_session_t, sin: *parse.parse_t) !void
     {
         _ = self;
-        try log.logln(log.LogLevel.info, @src(),
-                "code {} size {}", .{code, size});
+        try log.logln(log.LogLevel.info, @src(), "", .{});
         try sin.check_rem(8);
         const req = sin.in_u64_le();
         var mstat: structs.MyStat = .{};
@@ -248,18 +244,16 @@ pub const fuse_session_t = struct
         try sin.check_rem(8);
         const attr_timeout = sin.in_f64_le();
         try log.logln(log.LogLevel.info, @src(),
-                "attr_timeout {}", .{attr_timeout});
+                "st_mode {} attr_timeout {}", .{cstat.st_mode, attr_timeout});
         const req_ptr: *c.struct_fuse_req = @ptrFromInt(req);
         _ = c.fuse_reply_attr(req_ptr, &cstat, attr_timeout);
     }
 
     //*************************************************************************
-    fn process_reply_create(self: *fuse_session_t, code: u16, size: u16,
-            sin: *parse.parse_t) !void
+    fn process_reply_create(self: *fuse_session_t, sin: *parse.parse_t) !void
     {
         _ = self;
-        try log.logln(log.LogLevel.info, @src(),
-                "code {} size {}", .{code, size});
+        try log.logln(log.LogLevel.info, @src(), "", .{});
         try sin.check_rem(8);
         const req = sin.in_u64_le();
         var mep: structs.MyEntryParam = .{};
@@ -277,12 +271,10 @@ pub const fuse_session_t = struct
     }
 
     //*************************************************************************
-    fn process_reply_write(self: *fuse_session_t, code: u16, size: u16,
-            sin: *parse.parse_t) !void
+    fn process_reply_write(self: *fuse_session_t, sin: *parse.parse_t) !void
     {
         _ = self;
-        try log.logln(log.LogLevel.info, @src(),
-                "code {} size {}", .{code, size});
+        try log.logln(log.LogLevel.info, @src(), "", .{});
         try sin.check_rem(16);
         const req = sin.in_u64_le();
         const count = sin.in_u64_le();
@@ -291,15 +283,15 @@ pub const fuse_session_t = struct
     }
 
     //*************************************************************************
-    fn process_reply_buf(self: *fuse_session_t, code: u16, size: u16,
-            sin: *parse.parse_t) !void
+    fn process_reply_buf(self: *fuse_session_t, sin: *parse.parse_t) !void
     {
         _ = self;
-        try log.logln(log.LogLevel.info, @src(),
-                "code {} size {}", .{code, size});
-        try sin.check_rem(12);
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        try sin.check_rem(10);
         const req = sin.in_u64_le();
-        const buf_size = sin.in_u32_le();
+        const buf_size = sin.in_u16_le();
+        try log.logln_devel(log.LogLevel.info, @src(),
+                "buf_size {}", .{buf_size});
         try sin.check_rem(buf_size);
         const buf = sin.in_u8_slice(buf_size);
         const req_ptr: *c.struct_fuse_req = @ptrFromInt(req);
@@ -307,12 +299,53 @@ pub const fuse_session_t = struct
     }
 
     //*************************************************************************
-    fn process_reply_iov(self: *fuse_session_t, code: u16, size: u16,
-            sin: *parse.parse_t) !void
+    fn process_reply_buf_dir(self: *fuse_session_t, sin: *parse.parse_t) !void
     {
         _ = self;
-        try log.logln(log.LogLevel.info, @src(),
-                "code {} size {}", .{code, size});
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        try sin.check_rem(3 * 8 + 2);
+        const req = sin.in_u64_le();
+        const size = sin.in_u64_le();
+        const off = sin.in_i64_le();
+        const req_ptr: *c.struct_fuse_req = @ptrFromInt(req);
+        const num_dir_items: usize  = sin.in_u16_le();
+        try log.logln_devel(log.LogLevel.info, @src(),
+                "size {} off {} num_dir_items {}",
+                .{size, off, num_dir_items});
+        const buf = try g_allocator.alloc(u8, size);
+        defer g_allocator.free(buf);
+        var total_size: usize = 0;
+        var stbuf: c.struct_stat = undefined;
+        var index: usize = 0;
+        while (index < num_dir_items) : (index += 1)
+        {
+            try sin.check_rem(8 + 4 + 2);
+            const ino = sin.in_u64_le();
+            const mode = sin.in_u32_le();
+            const name_len = sin.in_u16_le();
+            try sin.check_rem(name_len);
+            const name = sin.in_u8_slice(name_len);
+            stbuf = .{};
+            stbuf.st_ino = ino;
+            stbuf.st_mode = mode;
+            total_size += c.fuse_add_direntry(req_ptr,
+                    buf.ptr + total_size, size - total_size,
+                    name.ptr, &stbuf, -1);
+            try log.logln_devel(log.LogLevel.info, @src(),
+                    "ino {} mode {} name_len {} name {s} total_size {}",
+                    .{ino, mode, name_len, name, total_size});
+        }
+        const off_usize: usize = @intCast(off);
+        _ = c.fuse_reply_buf(req_ptr,
+                buf.ptr + off_usize,
+                @min(size, total_size - off_usize));
+    }
+
+    //*************************************************************************
+    fn process_reply_iov(self: *fuse_session_t, sin: *parse.parse_t) !void
+    {
+        _ = self;
+        try log.logln(log.LogLevel.info, @src(), "", .{});
         try sin.check_rem(12);
         const req = sin.in_u64_le();
         const count = sin.in_u32_le();
@@ -333,12 +366,10 @@ pub const fuse_session_t = struct
     }
 
     //*************************************************************************
-    fn process_reply_data(self: *fuse_session_t, code: u16, size: u16,
-            sin: *parse.parse_t) !void
+    fn process_reply_data(self: *fuse_session_t, sin: *parse.parse_t) !void
     {
         _ = self;
-        try log.logln(log.LogLevel.info, @src(),
-                "code {} size {}", .{code, size});
+        try log.logln(log.LogLevel.info, @src(), "", .{});
         try sin.check_rem(16);
         const req = sin.in_u64_le();
         const count = sin.in_u64_le();
@@ -368,12 +399,10 @@ pub const fuse_session_t = struct
     }
 
     //*************************************************************************
-    fn process_reply_open(self: *fuse_session_t, code: u16, size: u16,
-            sin: *parse.parse_t) !void
+    fn process_reply_open(self: *fuse_session_t, sin: *parse.parse_t) !void
     {
         _ = self;
-        try log.logln(log.LogLevel.info, @src(),
-                "code {} size {}", .{code, size});
+        try log.logln(log.LogLevel.info, @src(), "", .{});
         try sin.check_rem(8);
         const req = sin.in_u64_le();
         var mfi: structs.MyFileInfo = .{};
@@ -387,12 +416,10 @@ pub const fuse_session_t = struct
     }
 
     //*************************************************************************
-    fn process_reply_entry(self: *fuse_session_t, code: u16, size: u16,
-            sin: *parse.parse_t) !void
+    fn process_reply_entry(self: *fuse_session_t, sin: *parse.parse_t) !void
     {
         _ = self;
-        try log.logln(log.LogLevel.info, @src(),
-                "code {} size {}", .{code, size});
+        try log.logln(log.LogLevel.info, @src(), "", .{});
         try sin.check_rem(8);
         const req = sin.in_u64_le();
         var meq: structs.MyEntryParam = .{};
@@ -404,11 +431,10 @@ pub const fuse_session_t = struct
     }
 
     //*************************************************************************
-    fn process_reply_err(self: *fuse_session_t, code: u16, size: u16,
-            sin: *parse.parse_t) !void
+    fn process_reply_err(self: *fuse_session_t, sin: *parse.parse_t) !void
     {
         _ = self;
-        try log.logln(log.LogLevel.info, @src(), "code {} size {}", .{code, size});
+        try log.logln(log.LogLevel.info, @src(), "", .{});
         try sin.check_rem(8 + 4);
         const req = sin.in_u64_le();
         const ierr = sin.in_i32_le();
@@ -417,14 +443,13 @@ pub const fuse_session_t = struct
     }
 
     //*************************************************************************
-    fn process_other(self: *fuse_session_t, code: u16, size: u16,
-            sin: *parse.parse_t) !void
+    fn process_other(self: *fuse_session_t,
+            pdu_code: structs.MyFuseReplyMsg) !void
     {
         _ = self;
-        _ = sin;
-        try log.logln(log.LogLevel.info, @src(),
-                "code {} size {}", .{code, size});
+        try log.logln(log.LogLevel.info, @src(), "pdu_code {}", .{pdu_code});
     }
+
     //*************************************************************************
     pub fn process_msg(self: *fuse_session_t, in_data_slice: []u8) !void
     {
@@ -433,21 +458,22 @@ pub const fuse_session_t = struct
                 in_data_slice);
         defer sin.delete();
         try sin.check_rem(4);
-        const code = sin.in_u16_le();
-        const size = sin.in_u16_le();
-        return switch (code)
+        const pdu_code: structs.MyFuseReplyMsg = @enumFromInt(sin.in_u16_le());
+        sin.in_u8_skip(2); // pdu_size
+        return switch (pdu_code)
         {
-            1 => self.process_reply_statfs(code, size, sin),
-            2 => self.process_reply_attr(code, size, sin),
-            3 => self.process_reply_create(code, size, sin),
-            4 => self.process_reply_write(code, size, sin),
-            5 => self.process_reply_buf(code, size, sin),
-            6 => self.process_reply_iov(code, size, sin),
-            7 => self.process_reply_data(code, size, sin),
-            8 => self.process_reply_open(code, size, sin),
-            9 => self.process_reply_entry(code, size, sin),
-            10 => self.process_reply_err(code, size, sin),
-            else => self.process_other(code, size, sin),
+            .statfs => self.process_reply_statfs(sin),
+            .attr => self.process_reply_attr(sin),
+            .create => self.process_reply_create(sin),
+            .write => self.process_reply_write(sin),
+            .buf => self.process_reply_buf(sin),
+            .buf_dir => self.process_reply_buf_dir(sin),
+            .iov => self.process_reply_iov(sin),
+            .data => self.process_reply_data(sin),
+            .open => self.process_reply_open(sin),
+            .entry => self.process_reply_entry(sin),
+            .err => self.process_reply_err(sin),
+            else => self.process_other(pdu_code),
         };
     }
 
@@ -483,9 +509,10 @@ pub const fuse_session_t = struct
                 sout.out_u64_le(@intFromPtr(areq));
                 sout.out_u64_le(parent);
                 // string
-                try sout.check_rem(2 + str.len);
-                sout.out_u16_le(@intCast(str.len));
+                try sout.check_rem(2 + str.len + 1);
+                sout.out_u16_le(@intCast(str.len + 1));
                 sout.out_u8_slice(str);
+                sout.out_u8(0);
                 sout.push_layer(0, 1);
                 sout.pop_layer(0);
                 // header
@@ -503,27 +530,65 @@ pub const fuse_session_t = struct
 
     //*************************************************************************
     // * Valid replies:
-    // *   fuse_reply_open
-    // *   fuse_reply_err
+	// *   fuse_reply_buf
+	// *   fuse_reply_data
+	// *   fuse_reply_err
     fn readdir(self: *fuse_session_t, req: c.fuse_req_t, ino: c.fuse_ino_t,
             size: usize, off: c.off_t, fi: ?*c.fuse_file_info) !void
     {
-        try log.logln(log.LogLevel.info, @src(), "", .{});
-
-        // if (req) |areq|
-        // {
-        //     if (fi) |afi|
-        //     {
-        //         const mfi: *c.myfuse_file_info = @alignCast(@ptrCast(afi));
-        //     }
-        // }
-
-        _ = self;
-        _ = ino;
-        _ = size;
-        _ = off;
-        _ = fi;
-        _ = c.fuse_reply_err(req, c.ENOENT);
+        try log.logln(log.LogLevel.info, @src(),
+                "size {} off {}", .{size, off});
+        if (req) |areq|
+        {
+            if (off < 0)
+            {
+                _ = c.fuse_reply_buf(areq, null, 0);
+                return;
+            }
+            // create sout_info
+            const sout_info = try g_allocator.create(sout_info_t);
+            errdefer g_allocator.destroy(sout_info);
+            try sout_info.init();
+            errdefer sout_info.deinit();
+            // create a temp parse
+            const sout = try parse.parse_t.create_from_slice(
+                    &g_allocator, &sout_info.out_data_slice);
+            defer sout.delete();
+            // header, skip and set later
+            try sout.check_rem(4);
+            sout.push_layer(4, 0);
+            // req, ino, size, off
+            try sout.check_rem(4 * 8 + 1);
+            sout.out_u64_le(@intFromPtr(areq));
+            sout.out_u64_le(ino);
+            sout.out_u64_le(size);
+            sout.out_i64_le(off);
+            if (fi) |afi|
+            {
+                try log.logln(log.LogLevel.info, @src(), "fi yes", .{});
+                sout.out_u8(1);
+                var mfi: structs.MyFileInfo = .{};
+                toMyFileInfo(afi, &mfi);
+                try mfi.out(sout);
+            }
+            else
+            {
+                try log.logln(log.LogLevel.info, @src(), "fi no", .{});
+                sout.out_u8(0);
+            }
+            sout.push_layer(0, 1);
+            sout.pop_layer(0);
+            // header
+            const code = @intFromEnum(structs.MyFuseMsg.readdir);
+            sout.out_u16_le(code);
+            const pdu_size = sout.layer_subtract(1, 0);
+            sout.out_u16_le(pdu_size);
+            sout_info.msg_size = pdu_size;
+            // add to linked list
+            try self.append_sout(sout_info);
+            return;
+         }
+        _ = c.fuse_reply_err(req, c.ENOTDIR);
     }
 
     //*************************************************************************
@@ -593,9 +658,49 @@ pub const fuse_session_t = struct
             fi: ?*c.fuse_file_info) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
-        _ = self;
-        _ = ino;
-        _ = fi;
+        if (req) |areq|
+        {
+            // create sout_info
+            const sout_info = try g_allocator.create(sout_info_t);
+            errdefer g_allocator.destroy(sout_info);
+            try sout_info.init();
+            errdefer sout_info.deinit();
+            // create a temp parse
+            const sout = try parse.parse_t.create_from_slice(
+                    &g_allocator, &sout_info.out_data_slice);
+            defer sout.delete();
+            // header, skip and set later
+            try sout.check_rem(4);
+            sout.push_layer(4, 0);
+            // req, ino, size, off
+            try sout.check_rem(8 + 8 + 1);
+            sout.out_u64_le(@intFromPtr(areq));
+            sout.out_u64_le(ino);
+            if (fi) |afi|
+            {
+                try log.logln(log.LogLevel.info, @src(), "fi yes", .{});
+                sout.out_u8(1);
+                var mfi: structs.MyFileInfo = .{};
+                toMyFileInfo(afi, &mfi);
+                try mfi.out(sout);
+            }
+            else
+            {
+                try log.logln(log.LogLevel.info, @src(), "fi no", .{});
+                sout.out_u8(0);
+            }
+            sout.push_layer(0, 1);
+            sout.pop_layer(0);
+            // header
+            const code = @intFromEnum(structs.MyFuseMsg.open);
+            sout.out_u16_le(code);
+            const pdu_size = sout.layer_subtract(1, 0);
+            sout.out_u16_le(pdu_size);
+            sout_info.msg_size = pdu_size;
+            // add to linked list
+            try self.append_sout(sout_info);
+            return;
+         }
         _ = c.fuse_reply_err(req, c.ENOENT);
     }
 
@@ -621,12 +726,58 @@ pub const fuse_session_t = struct
     fn read(self: *fuse_session_t, req: c.fuse_req_t, ino: c.fuse_ino_t,
             size: usize, off: c.off_t, fi: ?*c.fuse_file_info) !void
     {
-        try log.logln(log.LogLevel.info, @src(), "", .{});
-        _ = self;
-        _ = ino;
-        _ = size;
-        _ = off;
-        _ = fi;
+        try log.logln(log.LogLevel.info, @src(),
+                "size {} off {}", .{size, off});
+        if (req) |areq|
+        {
+            if (off < 0)
+            {
+                _ = c.fuse_reply_buf(areq, null, 0);
+                return;
+            }
+            // create sout_info
+            const sout_info = try g_allocator.create(sout_info_t);
+            errdefer g_allocator.destroy(sout_info);
+            try sout_info.init();
+            errdefer sout_info.deinit();
+            // create a temp parse
+            const sout = try parse.parse_t.create_from_slice(
+                    &g_allocator, &sout_info.out_data_slice);
+            defer sout.delete();
+            // header, skip and set later
+            try sout.check_rem(4);
+            sout.push_layer(4, 0);
+            // req, ino, size, off
+            try sout.check_rem(4 * 8 + 1);
+            sout.out_u64_le(@intFromPtr(areq));
+            sout.out_u64_le(ino);
+            sout.out_u64_le(size);
+            sout.out_i64_le(off);
+            if (fi) |afi|
+            {
+                try log.logln(log.LogLevel.info, @src(), "fi yes", .{});
+                sout.out_u8(1);
+                var mfi: structs.MyFileInfo = .{};
+                toMyFileInfo(afi, &mfi);
+                try mfi.out(sout);
+            }
+            else
+            {
+                try log.logln(log.LogLevel.info, @src(), "fi no", .{});
+                sout.out_u8(0);
+            }
+            sout.push_layer(0, 1);
+            sout.pop_layer(0);
+            // header
+            const code = @intFromEnum(structs.MyFuseMsg.read);
+            sout.out_u16_le(code);
+            const pdu_size = sout.layer_subtract(1, 0);
+            sout.out_u16_le(pdu_size);
+            sout_info.msg_size = pdu_size;
+            // add to linked list
+            try self.append_sout(sout_info);
+            return;
+         }
         _ = c.fuse_reply_err(req, c.ENOENT);
     }
 
@@ -859,7 +1010,7 @@ fn toMyStat(src: *c.struct_stat, dst: *structs.MyStat) void
     dst.st_dev = src.st_dev;
     dst.st_ino = src.st_ino;
     dst.st_nlink = src.st_nlink;
-    dst.st_mode = src.st_nlink;
+    dst.st_mode = src.st_mode;
     dst.st_uid = src.st_uid;
     dst.st_gid = src.st_gid;
     dst.st_rdev = src.st_rdev;
@@ -880,7 +1031,7 @@ fn fromMyStat(src: *structs.MyStat, dst: *c.struct_stat) void
     dst.st_dev = src.st_dev;
     dst.st_ino = src.st_ino;
     dst.st_nlink = src.st_nlink;
-    dst.st_mode = src.st_nlink;
+    dst.st_mode = src.st_mode;
     dst.st_uid = src.st_uid;
     dst.st_gid = src.st_gid;
     dst.st_rdev = src.st_rdev;

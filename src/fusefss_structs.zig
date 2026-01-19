@@ -10,6 +10,50 @@ const posix = std.posix;
 
 var g_allocator: std.mem.Allocator = std.heap.c_allocator;
 
+pub const MyFuseMsg = enum(u16)
+{
+    lookup      = 1,
+    readdir     = 2,
+    mkdir       = 3,
+    rmdir       = 4,
+    unlink      = 5,
+    rename      = 6,
+    open        = 7,
+    release     = 8,
+    read        = 9,
+    write       = 10,
+    create      = 11,
+    fsync       = 12,
+    getattr     = 13,
+    setattr     = 14,
+    opendir     = 15,
+    releasedir  = 16,
+    statfs      = 17,
+};
+
+pub const MyFuseReplyMsg = enum(u16)
+{
+    statfs      = 1,
+    attr        = 2,
+    create      = 3,
+    write       = 4,
+    buf         = 5,
+    buf_dir     = 105,
+    iov         = 6,
+    data        = 7,
+    open        = 8,
+    entry       = 9,
+    err         = 10,
+    end         = 11,
+};
+
+pub const dir_item = struct
+{
+    ino: u64 = 0,
+    mode: u32 = 0,
+    name: [] const u8 = &.{},
+};
+
 pub const MyFileInfo = struct
 {
     flags: i32 = 0,
