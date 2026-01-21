@@ -90,6 +90,7 @@ pub const fusefsc_info_t = struct // just one of these
             polls[poll_count].events = posix.POLL.IN;
             polls[poll_count].revents = 0;
             poll_count += 1;
+            // setup server fd
             const conn_index = poll_count;
             polls[poll_count].fd = self.sck;
             polls[poll_count].events = posix.POLL.IN;
@@ -99,6 +100,7 @@ pub const fusefsc_info_t = struct // just one of these
             }
             polls[poll_count].revents = 0;
             poll_count += 1;
+            // setup fuse fd
             var fuse_fd: i32 = 0;
             try self.fuse_session.get_fds(&fuse_fd);
             const fuse_index = poll_count;
@@ -106,6 +108,7 @@ pub const fusefsc_info_t = struct // just one of these
             polls[poll_count].events = posix.POLL.IN;
             polls[poll_count].revents = 0;
             poll_count += 1;
+            // do wait
             const active_polls = polls[0..poll_count];
             const poll_rv = try posix.poll(active_polls, timeout);
             if (poll_rv > 0)
@@ -118,14 +121,14 @@ pub const fusefsc_info_t = struct // just one of these
                 }
                 if ((active_polls[conn_index].revents & posix.POLL.IN) != 0)
                 {
-                    //try log.logln(log.LogLevel.info, @src(),
-                    //        "server socket set IN", .{});
+                    try log.logln_devel(log.LogLevel.info, @src(),
+                            "server socket set IN", .{});
                     const in_slice = if (self.readed < 4)
                             self.in_data_slice[self.readed..4] else
                             self.in_data_slice[self.readed..self.msg_size];
                     const read = posix.recv(self.sck, in_slice, 0) catch 0;
-                    //try log.logln(log.LogLevel.info, @src(),
-                    //        "data in read {}", .{read});
+                    try log.logln_devel(log.LogLevel.info, @src(),
+                            "data in read {}", .{read});
                     if (read < 1)
                     {
                         return FusefscError.RecvZero;
@@ -139,9 +142,9 @@ pub const fusefsc_info_t = struct // just one of these
                         try s.check_rem(4);
                         s.in_u8_skip(2); // code
                         self.msg_size = s.in_u16_le();
-                        //try log.logln(log.LogLevel.info, @src(),
-                        //        "data in got header msg_size {}",
-                        //        .{self.msg_size});
+                        try log.logln_devel(log.LogLevel.info, @src(),
+                                "data in got header msg_size {}",
+                                .{self.msg_size});
                         if (self.msg_size > self.in_data_slice.len)
                         {
                             return FusefscError.BadMessage;
@@ -150,9 +153,9 @@ pub const fusefsc_info_t = struct // just one of these
                     else if (self.readed >= self.msg_size)
                     {
                         // process message
-                        //try log.logln(log.LogLevel.info, @src(),
-                        //        "data in got body msg_size {}",
-                        //        .{self.msg_size});
+                        try log.logln_devel(log.LogLevel.info, @src(),
+                                "data in got body msg_size {}",
+                                .{self.msg_size});
                         const msg_slice = self.in_data_slice[0..self.msg_size];
                         try self.fuse_session.process_msg(msg_slice);
                         self.readed = 0;
@@ -160,8 +163,8 @@ pub const fusefsc_info_t = struct // just one of these
                 }
                 if ((active_polls[conn_index].revents & posix.POLL.OUT) != 0)
                 {
-                    //try log.logln(log.LogLevel.info, @src(),
-                    //        "server socket set OUT", .{});
+                    try log.logln_devel(log.LogLevel.info, @src(),
+                            "server socket set OUT", .{});
                     if (self.fuse_session.sout_head) |asout|
                     {
                         const out_slice =

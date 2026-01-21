@@ -51,16 +51,16 @@ const sout_info_t = struct
     //*************************************************************************
     fn init(self: *sout_info_t) !void
     {
-        //try log.logln(log.LogLevel.info, @src(),
-        //        "sout_info_t", .{});
+        try log.logln_devel(log.LogLevel.info, @src(),
+                "sout_info_t", .{});
         self.* = .{};
     }
 
     //*************************************************************************
     pub fn deinit(self: *sout_info_t) void
     {
-        //log.logln(log.LogLevel.info, @src(),
-        //        "sout_info_t", .{}) catch return;
+        log.logln_devel(log.LogLevel.info, @src(),
+                "sout_info_t", .{}) catch return;
         _ = self;
     }
 
@@ -99,7 +99,8 @@ pub const fuse_session_t = struct
         // delete any not sent messages
         while (self.sout_head) |asout_info|
         {
-            //log.logln(log.LogLevel.info, @src(), "cleanup item", .{}) catch return;
+            log.logln_devel(log.LogLevel.info, @src(), "cleanup item", .{})
+                    catch return;
             self.sout_head = asout_info.next;
             //_ = c.fuse_reply_err(req, c.ENOENT);
             asout_info.deinit();
@@ -144,77 +145,6 @@ pub const fuse_session_t = struct
         }
     }
 
-    // //*************************************************************************
-    // fn in_statvfs(st: *c.struct_statvfs, sin: *parse.parse_t) !void
-    // {
-    //     try sin.check_rem(11 * 8 + 4); // 92
-    //     st.f_bsize = sin.in_u64_le();
-    //     st.f_frsize = sin.in_u64_le();
-    //     st.f_blocks = sin.in_u64_le();
-    //     st.f_bfree = sin.in_u64_le();
-    //     st.f_bavail = sin.in_u64_le();
-    //     st.f_files = sin.in_u64_le();
-    //     st.f_ffree = sin.in_u64_le();
-    //     st.f_favail = sin.in_u64_le();
-    //     st.f_fsid = sin.in_u64_le();
-    //     st.f_flag = sin.in_u64_le();
-    //     st.f_namemax = sin.in_u64_le();
-    //     st.f_type = sin.in_u32_le();
-    // }
-
-    // //*************************************************************************
-    // fn in_stat(st: *c.struct_stat, sin: *parse.parse_t) !void
-    // {
-    //     try sin.check_rem(3 * 8 + 3 * 4 + 10 * 8); // 116
-    //     st.st_dev = sin.in_u64_le();
-    //     st.st_ino = sin.in_u64_le();
-    //     st.st_nlink = sin.in_u64_le();
-    //     st.st_mode = sin.in_u32_le();
-    //     st.st_uid = sin.in_u32_le();
-    //     st.st_gid = sin.in_u32_le();
-    //     st.st_rdev = sin.in_u64_le();
-    //     st.st_size = sin.in_i64_le();
-    //     st.st_blksize = sin.in_i64_le();
-    //     st.st_blocks = sin.in_i64_le();
-    //     st.st_atim.tv_sec = sin.in_i64_le();
-    //     st.st_atim.tv_nsec = sin.in_i64_le();
-    //     st.st_mtim.tv_sec = sin.in_i64_le();
-    //     st.st_mtim.tv_nsec = sin.in_i64_le();
-    //     st.st_ctim.tv_sec = sin.in_i64_le();
-    //     st.st_ctim.tv_nsec = sin.in_i64_le();
-    // }
-
-    // //*************************************************************************
-    // fn in_file_info(mfi: *c.struct_myfuse_file_info, sin: *parse.parse_t) !void
-    // {
-    //     try sin.check_rem(4 * 4 + 2 * 8 + 2 * 4 + 3 * 8); // 64
-    //     mfi.flags = sin.in_i32_le();
-    //     mfi.padding = sin.in_u32_le();
-    //     mfi.padding2 = sin.in_u32_le();
-    //     mfi.padding3 = sin.in_u32_le();
-    //     mfi.fh = sin.in_u64_le();
-    //     mfi.lock_owner = sin.in_u64_le();
-    //     mfi.poll_events = sin.in_u32_le();
-    //     mfi.backing_id = sin.in_i32_le();
-    //     mfi.compat_flags = sin.in_u64_le();
-    //     mfi.reserved[0] = sin.in_u64_le();
-    //     mfi.reserved[1] = sin.in_u64_le();
-    // }
-
-    // //*************************************************************************
-    // fn in_entry_param(ep: *c.struct_fuse_entry_param, sin: *parse.parse_t) !void
-    // {
-    //     try sin.check_rem(16);
-    //     ep.ino = sin.in_u64_le();
-    //     ep.generation = sin.in_u64_le();
-    //     var mstat: structs.MyStat = .{};
-    //     try mstat.in(sin);
-    //     fromMyStat(&mstat, &ep.attr);
-    //     try sin.check_rem(16);
-    //     ep.attr_timeout = sin.in_f64_le();
-    //     ep.entry_timeout = sin.in_f64_le();
-    // }
-
     //*************************************************************************
     fn process_reply_statfs(self: *fuse_session_t, sin: *parse.parse_t) !void
     {
@@ -243,8 +173,9 @@ pub const fuse_session_t = struct
         fromMyStat(&mstat, &cstat);
         try sin.check_rem(8);
         const attr_timeout = sin.in_f64_le();
-        try log.logln(log.LogLevel.info, @src(),
-                "st_mode {} attr_timeout {}", .{cstat.st_mode, attr_timeout});
+        try log.logln_devel(log.LogLevel.info, @src(),
+                "st_mode {} attr_timeout {}",
+                .{cstat.st_mode, attr_timeout});
         const req_ptr: *c.struct_fuse_req = @ptrFromInt(req);
         _ = c.fuse_reply_attr(req_ptr, &cstat, attr_timeout);
     }
@@ -453,7 +384,7 @@ pub const fuse_session_t = struct
     //*************************************************************************
     pub fn process_msg(self: *fuse_session_t, in_data_slice: []u8) !void
     {
-        //try log.logln(log.LogLevel.info, @src(), "", .{});
+        try log.logln_devel(log.LogLevel.info, @src(), "", .{});
         const sin = try parse.parse_t.create_from_slice(&g_allocator,
                 in_data_slice);
         defer sin.delete();
@@ -484,12 +415,13 @@ pub const fuse_session_t = struct
     fn lookup(self: *fuse_session_t, req: c.fuse_req_t,
             parent: c.fuse_ino_t, name: ?[*:0]const u8) !void
     {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
         if (req) |areq|
         {
             if (name) |aname|
             {
                 const str = std.mem.sliceTo(aname, 0);
-                try log.logln(log.LogLevel.info, @src(),
+                try log.logln_devel(log.LogLevel.info, @src(),
                         "self [0x{X}] req [0x{X}] parent [0x{X}] name [{s}]",
                         .{@intFromPtr(self), @intFromPtr(areq), parent, str});
                 // create sout_info
@@ -516,10 +448,11 @@ pub const fuse_session_t = struct
                 sout.push_layer(0, 1);
                 sout.pop_layer(0);
                 // header
-                sout.out_u16_le(1); // code
-                const size = sout.layer_subtract(1, 0);
-                sout.out_u16_le(size);
-                sout_info.msg_size = size;
+                const pdu_code = @intFromEnum(structs.MyFuseMsg.lookup);
+                sout.out_u16_le(pdu_code);
+                const pdu_size = sout.layer_subtract(1, 0);
+                sout.out_u16_le(pdu_size);
+                sout_info.msg_size = pdu_size;
                 // add to linked list
                 try self.append_sout(sout_info);
                 return;
@@ -536,7 +469,8 @@ pub const fuse_session_t = struct
     fn readdir(self: *fuse_session_t, req: c.fuse_req_t, ino: c.fuse_ino_t,
             size: usize, off: c.off_t, fi: ?*c.fuse_file_info) !void
     {
-        try log.logln(log.LogLevel.info, @src(),
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        try log.logln_devel(log.LogLevel.info, @src(),
                 "size {} off {}", .{size, off});
         if (req) |areq|
         {
@@ -565,7 +499,7 @@ pub const fuse_session_t = struct
             sout.out_i64_le(off);
             if (fi) |afi|
             {
-                try log.logln(log.LogLevel.info, @src(), "fi yes", .{});
+                try log.logln_devel(log.LogLevel.info, @src(), "fi yes", .{});
                 sout.out_u8(1);
                 var mfi: structs.MyFileInfo = .{};
                 toMyFileInfo(afi, &mfi);
@@ -573,14 +507,14 @@ pub const fuse_session_t = struct
             }
             else
             {
-                try log.logln(log.LogLevel.info, @src(), "fi no", .{});
+                try log.logln_devel(log.LogLevel.info, @src(), "fi no", .{});
                 sout.out_u8(0);
             }
             sout.push_layer(0, 1);
             sout.pop_layer(0);
             // header
-            const code = @intFromEnum(structs.MyFuseMsg.readdir);
-            sout.out_u16_le(code);
+            const pdu_code = @intFromEnum(structs.MyFuseMsg.readdir);
+            sout.out_u16_le(pdu_code);
             const pdu_size = sout.layer_subtract(1, 0);
             sout.out_u16_le(pdu_size);
             sout_info.msg_size = pdu_size;
@@ -678,7 +612,7 @@ pub const fuse_session_t = struct
             sout.out_u64_le(ino);
             if (fi) |afi|
             {
-                try log.logln(log.LogLevel.info, @src(), "fi yes", .{});
+                try log.logln_devel(log.LogLevel.info, @src(), "fi yes", .{});
                 sout.out_u8(1);
                 var mfi: structs.MyFileInfo = .{};
                 toMyFileInfo(afi, &mfi);
@@ -686,14 +620,14 @@ pub const fuse_session_t = struct
             }
             else
             {
-                try log.logln(log.LogLevel.info, @src(), "fi no", .{});
+                try log.logln_devel(log.LogLevel.info, @src(), "fi no", .{});
                 sout.out_u8(0);
             }
             sout.push_layer(0, 1);
             sout.pop_layer(0);
             // header
-            const code = @intFromEnum(structs.MyFuseMsg.open);
-            sout.out_u16_le(code);
+            const pdu_code = @intFromEnum(structs.MyFuseMsg.open);
+            sout.out_u16_le(pdu_code);
             const pdu_size = sout.layer_subtract(1, 0);
             sout.out_u16_le(pdu_size);
             sout_info.msg_size = pdu_size;
@@ -711,10 +645,49 @@ pub const fuse_session_t = struct
             fi: ?*c.fuse_file_info) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
-        _ = self;
-        _ = ino;
-        _ = fi;
-        _ = c.fuse_reply_err(req, c.ENOENT);
+        if (req) |areq|
+        {
+            // create sout_info
+            const sout_info = try g_allocator.create(sout_info_t);
+            errdefer g_allocator.destroy(sout_info);
+            try sout_info.init();
+            errdefer sout_info.deinit();
+            // create a temp parse
+            const sout = try parse.parse_t.create_from_slice(
+                    &g_allocator, &sout_info.out_data_slice);
+            defer sout.delete();
+            // header, skip and set later
+            try sout.check_rem(4);
+            sout.push_layer(4, 0);
+            // req, ino, size, off
+            try sout.check_rem(8 + 8 + 1);
+            sout.out_u64_le(@intFromPtr(areq));
+            sout.out_u64_le(ino);
+            if (fi) |afi|
+            {
+                try log.logln_devel(log.LogLevel.info, @src(), "fi yes", .{});
+                sout.out_u8(1);
+                var mfi: structs.MyFileInfo = .{};
+                toMyFileInfo(afi, &mfi);
+                try mfi.out(sout);
+            }
+            else
+            {
+                try log.logln_devel(log.LogLevel.info, @src(), "fi no", .{});
+                sout.out_u8(0);
+            }
+            sout.push_layer(0, 1);
+            sout.pop_layer(0);
+            // header
+            const pdu_code = @intFromEnum(structs.MyFuseMsg.release);
+            sout.out_u16_le(pdu_code);
+            const pdu_size = sout.layer_subtract(1, 0);
+            sout.out_u16_le(pdu_size);
+            sout_info.msg_size = pdu_size;
+            // add to linked list
+            try self.append_sout(sout_info);
+            return;
+         }
     }
 
     //*************************************************************************
@@ -726,7 +699,8 @@ pub const fuse_session_t = struct
     fn read(self: *fuse_session_t, req: c.fuse_req_t, ino: c.fuse_ino_t,
             size: usize, off: c.off_t, fi: ?*c.fuse_file_info) !void
     {
-        try log.logln(log.LogLevel.info, @src(),
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        try log.logln_devel(log.LogLevel.info, @src(),
                 "size {} off {}", .{size, off});
         if (req) |areq|
         {
@@ -755,7 +729,7 @@ pub const fuse_session_t = struct
             sout.out_i64_le(off);
             if (fi) |afi|
             {
-                try log.logln(log.LogLevel.info, @src(), "fi yes", .{});
+                try log.logln_devel(log.LogLevel.info, @src(), "fi yes", .{});
                 sout.out_u8(1);
                 var mfi: structs.MyFileInfo = .{};
                 toMyFileInfo(afi, &mfi);
@@ -763,7 +737,7 @@ pub const fuse_session_t = struct
             }
             else
             {
-                try log.logln(log.LogLevel.info, @src(), "fi no", .{});
+                try log.logln_devel(log.LogLevel.info, @src(), "fi no", .{});
                 sout.out_u8(0);
             }
             sout.push_layer(0, 1);
@@ -790,12 +764,63 @@ pub const fuse_session_t = struct
             fi: ?*c.fuse_file_info) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
-        _ = self;
-        _ = ino;
-        _ = buf;
-        _ = size;
-        _ = off;
-        _ = fi;
+        try log.logln(log.LogLevel.info, @src(),
+                "size {} off {}", .{size, off});
+        if (req) |areq|
+        {
+            // create sout_info
+            const sout_info = try g_allocator.create(sout_info_t);
+            errdefer g_allocator.destroy(sout_info);
+            try sout_info.init();
+            errdefer sout_info.deinit();
+            // create a temp parse
+            const sout = try parse.parse_t.create_from_slice(
+                    &g_allocator, &sout_info.out_data_slice);
+            defer sout.delete();
+            // header, skip and set later
+            try sout.check_rem(4);
+            sout.push_layer(4, 0);
+            // req, ino, size, off
+            try sout.check_rem(3 * 8);
+            sout.out_u64_le(@intFromPtr(areq));
+            sout.out_u64_le(ino);
+            if (buf) |abuf|
+            {
+                sout.out_u64_le(size);
+                try sout.check_rem(size);
+                sout.out_u8_slice(abuf[0..size]);
+            }
+            else
+            {
+                sout.out_u64_le(0);
+            }
+            try sout.check_rem(8 + 1);
+            sout.out_i64_le(off);
+            if (fi) |afi|
+            {
+                try log.logln_devel(log.LogLevel.info, @src(), "fi yes", .{});
+                sout.out_u8(1);
+                var mfi: structs.MyFileInfo = .{};
+                toMyFileInfo(afi, &mfi);
+                try mfi.out(sout);
+            }
+            else
+            {
+                try log.logln_devel(log.LogLevel.info, @src(), "fi no", .{});
+                sout.out_u8(0);
+            }
+            sout.push_layer(0, 1);
+            sout.pop_layer(0);
+            // header
+            const pdu_code = @intFromEnum(structs.MyFuseMsg.write);
+            sout.out_u16_le(pdu_code);
+            const pdu_size = sout.layer_subtract(1, 0);
+            sout.out_u16_le(pdu_size);
+            sout_info.msg_size = pdu_size;
+            // add to linked list
+            try self.append_sout(sout_info);
+            return;
+         }
         _ = c.fuse_reply_err(req, c.ENOENT);
     }
 
@@ -836,9 +861,10 @@ pub const fuse_session_t = struct
     fn getattr(self: *fuse_session_t, req: c.fuse_req_t, ino: c.fuse_ino_t,
             fi: ?*c.fuse_file_info) !void
     {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
         if (req) |areq|
         {
-            try log.logln(log.LogLevel.info, @src(),
+            try log.logln_devel(log.LogLevel.info, @src(),
                     "self [0x{X}] req [0x{X}] ino [0x{X}]",
                     .{@intFromPtr(self), @intFromPtr(areq), ino});
             // create sout_info
@@ -859,7 +885,7 @@ pub const fuse_session_t = struct
             sout.out_u64_le(ino);
             if (fi) |afi|
             {
-                try log.logln(log.LogLevel.info, @src(), "fi yes", .{});
+                try log.logln_devel(log.LogLevel.info, @src(), "fi yes", .{});
                 sout.out_u8(1);
                 var mfi: structs.MyFileInfo = .{};
                 toMyFileInfo(afi, &mfi);
@@ -867,16 +893,17 @@ pub const fuse_session_t = struct
             }
             else
             {
-                try log.logln(log.LogLevel.info, @src(), "fi no", .{});
+                try log.logln_devel(log.LogLevel.info, @src(), "fi no", .{});
                 sout.out_u8(0);
             }
             sout.push_layer(0, 1);
             sout.pop_layer(0);
             // header
-            sout.out_u16_le(13); // code
-            const size = sout.layer_subtract(1, 0);
-            sout.out_u16_le(size);
-            sout_info.msg_size = size;
+            const pdu_code = @intFromEnum(structs.MyFuseMsg.getattr);
+            sout.out_u16_le(pdu_code);
+            const pdu_size = sout.layer_subtract(1, 0);
+            sout.out_u16_le(pdu_size);
+            sout_info.msg_size = pdu_size;
             // add to linked list
             try self.append_sout(sout_info);
             return;
@@ -903,7 +930,6 @@ pub const fuse_session_t = struct
         _ = to_set;
         _ = fi;
         _ = c.fuse_reply_err(req, c.ENOENT);
-
     }
 
     //*************************************************************************
@@ -913,9 +939,10 @@ pub const fuse_session_t = struct
     fn opendir(self: *fuse_session_t, req: c.fuse_req_t, ino: c.fuse_ino_t,
             fi: ?*c.fuse_file_info) !void
     {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
         if (req) |areq|
         {
-            try log.logln(log.LogLevel.info, @src(),
+            try log.logln_devel(log.LogLevel.info, @src(),
                     "self [0x{X}] req [0x{X}] ino [0x{X}]",
                     .{@intFromPtr(self), @intFromPtr(areq), ino});
             // create sout_info
@@ -931,7 +958,7 @@ pub const fuse_session_t = struct
             try sout.check_rem(4);
             sout.push_layer(4, 0);
             // req, ino
-            try sout.check_rem(8 + 8);
+            try sout.check_rem(8 + 8 + 1);
             sout.out_u64_le(@intFromPtr(areq));
             sout.out_u64_le(ino);
             if (fi) |afi|
@@ -948,10 +975,11 @@ pub const fuse_session_t = struct
             sout.push_layer(0, 1);
             sout.pop_layer(0);
             // header
-            sout.out_u16_le(15); // code
-            const size = sout.layer_subtract(1, 0);
-            sout.out_u16_le(size);
-            sout_info.msg_size = size;
+            const pdu_code = @intFromEnum(structs.MyFuseMsg.opendir);
+            sout.out_u16_le(pdu_code);
+            const pdu_size = sout.layer_subtract(1, 0);
+            sout.out_u16_le(pdu_size);
+            sout_info.msg_size = pdu_size;
             // add to linked list
             try self.append_sout(sout_info);
             return;
@@ -966,9 +994,50 @@ pub const fuse_session_t = struct
             fi: ?*c.fuse_file_info) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
-        _ = self;
-        _ = ino;
-        _ = fi;
+        if (req) |areq|
+        {
+            try log.logln_devel(log.LogLevel.info, @src(),
+                    "self [0x{X}] req [0x{X}] ino [0x{X}]",
+                    .{@intFromPtr(self), @intFromPtr(areq), ino});
+            // create sout_info
+            const sout_info = try g_allocator.create(sout_info_t);
+            errdefer g_allocator.destroy(sout_info);
+            try sout_info.init();
+            errdefer sout_info.deinit();
+            // create a temp parse
+            const sout = try parse.parse_t.create_from_slice(
+                    &g_allocator, &sout_info.out_data_slice);
+            defer sout.delete();
+            // header, skip and set later
+            try sout.check_rem(4);
+            sout.push_layer(4, 0);
+            // req, ino
+            try sout.check_rem(8 + 8 + 1);
+            sout.out_u64_le(@intFromPtr(areq));
+            sout.out_u64_le(ino);
+            if (fi) |afi|
+            {
+                sout.out_u8(1);
+                var mfi: structs.MyFileInfo = .{};
+                toMyFileInfo(afi, &mfi);
+                try mfi.out(sout);
+            }
+            else
+            {
+                sout.out_u8(0);
+            }
+            sout.push_layer(0, 1);
+            sout.pop_layer(0);
+            // header
+            const pdu_code = @intFromEnum(structs.MyFuseMsg.releasedir);
+            sout.out_u16_le(pdu_code);
+            const pdu_size = sout.layer_subtract(1, 0);
+            sout.out_u16_le(pdu_size);
+            sout_info.msg_size = pdu_size;
+            // add to linked list
+            try self.append_sout(sout_info);
+            return;
+        }
         _ = c.fuse_reply_err(req, c.ENOENT);
     }
 
@@ -1288,14 +1357,8 @@ export fn cb_opendir(req: c.fuse_req_t, ino: c.fuse_ino_t,
     if (user) |auser|
     {
         const lfs: *fuse_session_t = @alignCast(@ptrCast(auser));
-        if (lfs.opendir(req, ino, fi)) |_|
-        {
-            return;
-        }
-        else |err|
-        {
-            cb_error(@src(), err);
-        }
+        return lfs.opendir(req, ino, fi)
+                catch |err| cb_error(@src(), err);
     }
     _ = c.fuse_reply_err(req, c.ENOENT);
 }

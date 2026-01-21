@@ -43,49 +43,17 @@ void cb_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi);
 void cb_releasedir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info* fi);
 void cb_statfs(fuse_req_t req, fuse_ino_t ino);
 
-#define CHECK_FIELD(_field, _no) do { \
-    memset(&fi, 0, sizeof(fi)); fi._field = 1; \
-    memcpy(&mfi, &fi, sizeof(fi)); \
-    ok = ok && (mfi.padding == (_no)); } while (0)
-
-//*****************************************************************************
-// test myfuse_file_info mtches fuse_file_info
-static int
-test_file_info(void)
-{
-    int ok;
-    struct myfuse_file_info mfi;
-    struct fuse_file_info fi;
-
-    ok = sizeof(fi) == sizeof(mfi);
-    CHECK_FIELD(writepage,              1 << 0);
-    CHECK_FIELD(direct_io,              1 << 1);
-    CHECK_FIELD(keep_cache,             1 << 2);
-    CHECK_FIELD(flush,                  1 << 3);
-    CHECK_FIELD(nonseekable,            1 << 4);
-    CHECK_FIELD(flock_release,          1 << 5);
-    CHECK_FIELD(cache_readdir,          1 << 6);
-    CHECK_FIELD(noflush,                1 << 7);
-    CHECK_FIELD(parallel_direct_writes, 1 << 8);
-    return ok;
-}
-
 //*****************************************************************************
 // return 0 = ok
 //        1 = alloc failed
 //        2 = fuse_session_new failed
 //        3 = fuse_session_mount failed
-//        4 = tests fail
 int
 myfuse_create(const char* mountpoint, void* user, void** obj)
 {
     int rv;
     struct myfuse_info* mi;
 
-    if (!test_file_info())
-    {
-        return 4;
-    }
     rv = 1;
     mi = (struct myfuse_info*)calloc(1, sizeof(struct myfuse_info));
     if (mi != NULL)
@@ -94,21 +62,21 @@ myfuse_create(const char* mountpoint, void* user, void** obj)
         // assign callbacks
         mi->ops.lookup      = cb_lookup;
         mi->ops.readdir     = cb_readdir;
-        //mi->ops.mkdir       = cb_mkdir;
-        //mi->ops.rmdir       = cb_rmdir;
-        //mi->ops.unlink      = cb_unlink;
-        //mi->ops.rename      = cb_rename;
+        mi->ops.mkdir       = cb_mkdir;
+        mi->ops.rmdir       = cb_rmdir;
+        mi->ops.unlink      = cb_unlink;
+        mi->ops.rename      = cb_rename;
         mi->ops.open        = cb_open;
-        //mi->ops.release     = cb_release;
+        mi->ops.release     = cb_release;
         mi->ops.read        = cb_read;
-        //mi->ops.write       = cb_write;
-        //mi->ops.create      = cb_create;
-        //mi->ops.fsync       = cb_fsync;
+        mi->ops.write       = cb_write;
+        mi->ops.create      = cb_create;
+        mi->ops.fsync       = cb_fsync;
         mi->ops.getattr     = cb_getattr;
-        //mi->ops.setattr     = cb_setattr;
-        //mi->ops.opendir     = cb_opendir;
-        //mi->ops.releasedir  = cb_releasedir;
-        //mi->ops.statfs      = cb_statfs;
+        mi->ops.setattr     = cb_setattr;
+        mi->ops.opendir     = cb_opendir;
+        mi->ops.releasedir  = cb_releasedir;
+        mi->ops.statfs      = cb_statfs;
         // create session
         rv = 2;
         mi->se = fuse_session_new(&mi->args, &mi->ops,
