@@ -19,6 +19,7 @@ pub const FuseError = error
     FuseNewFailed,
     FuseAllocFailed,
     FuseOtherFailed,
+    BadErrorCode,
 };
 
 //*****************************************************************************
@@ -66,6 +67,16 @@ const sout_info_t = struct
 
 };
 
+//*****************************************************************************
+fn check_error(err: structs.MyFuseError, ierr: i32) !void
+{
+    const lerr = @intFromEnum(err);
+    if (lerr != ierr)
+    {
+        return FuseError.BadErrorCode;
+    }
+}
+
 pub const fuse_session_t = struct
 {
     mi: ?*anyopaque = null,
@@ -78,6 +89,11 @@ pub const fuse_session_t = struct
         try log.logln(log.LogLevel.info, @src(),
                 "fuse_session_t", .{});
         self.* = .{};
+        // make sure errors values match
+        try check_error(structs.MyFuseError.ENOENT, c.ENOENT);
+        try check_error(structs.MyFuseError.EACCES, c.EACCES);
+        try check_error(structs.MyFuseError.ENOTDIR, c.ENOTDIR);
+        try check_error(structs.MyFuseError.EISDIR, c.EISDIR);
         const rv = c.myfuse_create("/home/jay/test_mount", self, &self.mi);
         try log.logln(log.LogLevel.info, @src(), "myfuse_create rv {}", .{rv});
         return switch (rv)
@@ -533,10 +549,44 @@ pub const fuse_session_t = struct
             name: ?[*:0]const u8, mode: c.mode_t) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
-        _ = self;
-        _ = parent;
-        _ = name;
-        _ = mode;
+        if (req) |areq|
+        {
+            if (name) |aname|
+            {
+                const str = std.mem.sliceTo(aname, 0);
+                // create sout_info
+                const sout_info = try g_allocator.create(sout_info_t);
+                errdefer g_allocator.destroy(sout_info);
+                try sout_info.init();
+                errdefer sout_info.deinit();
+                // create a temp parse
+                const sout = try parse.parse_t.create_from_slice(
+                        &g_allocator, &sout_info.out_data_slice);
+                defer sout.delete();
+                // header, skip and set later
+                try sout.check_rem(4);
+                sout.push_layer(4, 0);
+                // req
+                try sout.check_rem(8 + 8 + 2 + str.len + 1 + 4);
+                sout.out_u64_le(@intFromPtr(areq));
+                sout.out_u64_le(parent);
+                sout.out_u16_le(@intCast(str.len + 1));
+                sout.out_u8_slice(str);
+                sout.out_u8(0);
+                sout.out_u32_le(mode);
+                sout.push_layer(0, 1);
+                sout.pop_layer(0);
+                // header
+                const pdu_code = @intFromEnum(structs.MyFuseMsg.mkdir);
+                sout.out_u16_le(pdu_code);
+                const pdu_size = sout.layer_subtract(1, 0);
+                sout.out_u16_le(pdu_size);
+                sout_info.msg_size = pdu_size;
+                // add to linked list
+                try self.append_sout(sout_info);
+                return;
+            }
+        }
         _ = c.fuse_reply_err(req, c.ENOENT);
     }
 
@@ -547,9 +597,43 @@ pub const fuse_session_t = struct
             name: ?[*:0]const u8) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
-        _ = self;
-        _ = parent;
-        _ = name;
+        if (req) |areq|
+        {
+            if (name) |aname|
+            {
+                const str = std.mem.sliceTo(aname, 0);
+                // create sout_info
+                const sout_info = try g_allocator.create(sout_info_t);
+                errdefer g_allocator.destroy(sout_info);
+                try sout_info.init();
+                errdefer sout_info.deinit();
+                // create a temp parse
+                const sout = try parse.parse_t.create_from_slice(
+                        &g_allocator, &sout_info.out_data_slice);
+                defer sout.delete();
+                // header, skip and set later
+                try sout.check_rem(4);
+                sout.push_layer(4, 0);
+                // req
+                try sout.check_rem(8 + 8 + 2 + str.len + 1);
+                sout.out_u64_le(@intFromPtr(areq));
+                sout.out_u64_le(parent);
+                sout.out_u16_le(@intCast(str.len + 1));
+                sout.out_u8_slice(str);
+                sout.out_u8(0);
+                sout.push_layer(0, 1);
+                sout.pop_layer(0);
+                // header
+                const pdu_code = @intFromEnum(structs.MyFuseMsg.rmdir);
+                sout.out_u16_le(pdu_code);
+                const pdu_size = sout.layer_subtract(1, 0);
+                sout.out_u16_le(pdu_size);
+                sout_info.msg_size = pdu_size;
+                // add to linked list
+                try self.append_sout(sout_info);
+                return;
+            }
+        }
         _ = c.fuse_reply_err(req, c.ENOENT);
     }
 
@@ -560,9 +644,43 @@ pub const fuse_session_t = struct
             name: ?[*:0]const u8) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
-        _ = self;
-        _ = parent;
-        _ = name;
+        if (req) |areq|
+        {
+            if (name) |aname|
+            {
+                const str = std.mem.sliceTo(aname, 0);
+                // create sout_info
+                const sout_info = try g_allocator.create(sout_info_t);
+                errdefer g_allocator.destroy(sout_info);
+                try sout_info.init();
+                errdefer sout_info.deinit();
+                // create a temp parse
+                const sout = try parse.parse_t.create_from_slice(
+                        &g_allocator, &sout_info.out_data_slice);
+                defer sout.delete();
+                // header, skip and set later
+                try sout.check_rem(4);
+                sout.push_layer(4, 0);
+                // req
+                try sout.check_rem(8 + 8 + 2 + str.len + 1);
+                sout.out_u64_le(@intFromPtr(areq));
+                sout.out_u64_le(parent);
+                sout.out_u16_le(@intCast(str.len + 1));
+                sout.out_u8_slice(str);
+                sout.out_u8(0);
+                sout.push_layer(0, 1);
+                sout.pop_layer(0);
+                // header
+                const pdu_code = @intFromEnum(structs.MyFuseMsg.unlink);
+                sout.out_u16_le(pdu_code);
+                const pdu_size = sout.layer_subtract(1, 0);
+                sout.out_u16_le(pdu_size);
+                sout_info.msg_size = pdu_size;
+                // add to linked list
+                try self.append_sout(sout_info);
+                return;
+            }
+        }
         _ = c.fuse_reply_err(req, c.ENOENT);
     }
 
@@ -575,12 +693,57 @@ pub const fuse_session_t = struct
             flags: c_uint) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
-        _ = self;
-        _ = old_parent;
-        _ = old_name;
-        _ = new_parent;
-        _ = new_name;
-        _ = flags;
+        if (req) |areq|
+        {
+            if (old_name) |aold_name|
+            {
+                if (new_name) |anew_name|
+                {
+                    const old_name_str = std.mem.sliceTo(aold_name, 0);
+                    const new_name_str = std.mem.sliceTo(anew_name, 0);
+                    try log.logln_devel(log.LogLevel.info, @src(),
+                            "old_name_str.len [{}] new_name_str.len [{}]",
+                            .{old_name_str.len, new_name_str.len});
+                    // create sout_info
+                    const sout_info = try g_allocator.create(sout_info_t);
+                    errdefer g_allocator.destroy(sout_info);
+                    try sout_info.init();
+                    errdefer sout_info.deinit();
+                    // create a temp parse
+                    const sout = try parse.parse_t.create_from_slice(
+                            &g_allocator, &sout_info.out_data_slice);
+                    defer sout.delete();
+                    // header, skip and set later
+                    try sout.check_rem(4);
+                    sout.push_layer(4, 0);
+                    // req, ino, size, off
+                    try sout.check_rem(8 +
+                            8 + 2 + old_name_str.len + 1 +
+                            8 + 2 + new_name_str.len + 1 + 4);
+                    sout.out_u64_le(@intFromPtr(areq));
+                    sout.out_u64_le(old_parent);
+                    sout.out_u16_le(@intCast(old_name_str.len + 1));
+                    sout.out_u8_slice(old_name_str);
+                    sout.out_u8(0);
+                    sout.out_u64_le(new_parent);
+                    sout.out_u16_le(@intCast(new_name_str.len + 1));
+                    sout.out_u8_slice(new_name_str);
+                    sout.out_u8(0);
+                    sout.out_u32_le(flags);
+                    sout.push_layer(0, 1);
+                    sout.pop_layer(0);
+                    // header
+                    const pdu_code = @intFromEnum(structs.MyFuseMsg.rename);
+                    sout.out_u16_le(pdu_code);
+                    const pdu_size = sout.layer_subtract(1, 0);
+                    sout.out_u16_le(pdu_size);
+                    sout_info.msg_size = pdu_size;
+                    // add to linked list
+                    try self.append_sout(sout_info);
+                    return;
+                }
+            }
+        }
         _ = c.fuse_reply_err(req, c.ENOENT);
     }
 
@@ -832,11 +995,57 @@ pub const fuse_session_t = struct
             name: ?[*:0]const u8, mode: c.mode_t, fi: ?*c.fuse_file_info) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
-        _ = self;
-        _ = parent;
-        _ = name;
-        _ = mode;
-        _ = fi;
+        if (req) |areq|
+        {
+            if (name) |aname|
+            {
+                const name_str = std.mem.sliceTo(aname, 0);
+                // create sout_info
+                const sout_info = try g_allocator.create(sout_info_t);
+                errdefer g_allocator.destroy(sout_info);
+                try sout_info.init();
+                errdefer sout_info.deinit();
+                // create a temp parse
+                const sout = try parse.parse_t.create_from_slice(
+                        &g_allocator, &sout_info.out_data_slice);
+                defer sout.delete();
+                // header, skip and set later
+                try sout.check_rem(4);
+                sout.push_layer(4, 0);
+                // req
+                try sout.check_rem(8 + 8 + 2 + name_str.len + 1 + 4 + 1);
+                sout.out_u64_le(@intFromPtr(areq));
+                sout.out_u64_le(parent);
+                sout.out_u16_le(@intCast(name_str.len + 1));
+                sout.out_u8_slice(name_str);
+                sout.out_u8(0);
+                sout.out_u32_le(mode);
+                if (fi) |afi|
+                {
+                    try log.logln_devel(log.LogLevel.info, @src(), "fi yes", .{});
+                    sout.out_u8(1);
+                    var mfi: structs.MyFileInfo = .{};
+                    toMyFileInfo(afi, &mfi);
+                    try mfi.out(sout);
+                }
+                else
+                {
+                    try log.logln_devel(log.LogLevel.info, @src(), "fi no", .{});
+                    sout.out_u8(0);
+                }
+                sout.push_layer(0, 1);
+                sout.pop_layer(0);
+                // header
+                const pdu_code = @intFromEnum(structs.MyFuseMsg.create);
+                sout.out_u16_le(pdu_code);
+                const pdu_size = sout.layer_subtract(1, 0);
+                sout.out_u16_le(pdu_size);
+                sout_info.msg_size = pdu_size;
+                // add to linked list
+                try self.append_sout(sout_info);
+                return;
+            }
+         }
         _ = c.fuse_reply_err(req, c.ENOENT);
     }
 
@@ -847,10 +1056,50 @@ pub const fuse_session_t = struct
             datasync: c_int, fi: ?*c.fuse_file_info) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
-        _ = self;
-        _ = ino;
-        _ = datasync;
-        _ = fi;
+        if (req) |areq|
+        {
+            // create sout_info
+            const sout_info = try g_allocator.create(sout_info_t);
+            errdefer g_allocator.destroy(sout_info);
+            try sout_info.init();
+            errdefer sout_info.deinit();
+            // create a temp parse
+            const sout = try parse.parse_t.create_from_slice(
+                    &g_allocator, &sout_info.out_data_slice);
+            defer sout.delete();
+            // header, skip and set later
+            try sout.check_rem(4);
+            sout.push_layer(4, 0);
+            // req
+            try sout.check_rem(8 + 8 + 4 + 1);
+            sout.out_u64_le(@intFromPtr(areq));
+            sout.out_u64_le(ino);
+            sout.out_i32_le(datasync);
+            if (fi) |afi|
+            {
+                try log.logln_devel(log.LogLevel.info, @src(), "fi yes", .{});
+                sout.out_u8(1);
+                var mfi: structs.MyFileInfo = .{};
+                toMyFileInfo(afi, &mfi);
+                try mfi.out(sout);
+            }
+            else
+            {
+                try log.logln_devel(log.LogLevel.info, @src(), "fi no", .{});
+                sout.out_u8(0);
+            }
+            sout.push_layer(0, 1);
+            sout.pop_layer(0);
+            // header
+            const pdu_code = @intFromEnum(structs.MyFuseMsg.fsync);
+            sout.out_u16_le(pdu_code);
+            const pdu_size = sout.layer_subtract(1, 0);
+            sout.out_u16_le(pdu_size);
+            sout_info.msg_size = pdu_size;
+            // add to linked list
+            try self.append_sout(sout_info);
+            return;
+         }
         _ = c.fuse_reply_err(req, c.ENOENT);
     }
 
@@ -908,11 +1157,6 @@ pub const fuse_session_t = struct
             try self.append_sout(sout_info);
             return;
         }
-        else
-        {
-            try log.logln(log.LogLevel.info, @src(), "no req", .{});
-        }
-        try log.logln(log.LogLevel.info, @src(), "", .{});
         _ = c.fuse_reply_err(req, c.ENOENT);
     }
 
@@ -924,11 +1168,67 @@ pub const fuse_session_t = struct
             attr: ?*c.struct_stat, to_set: c_int, fi: ?*c.fuse_file_info) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
-        _ = self;
-        _ = ino;
-        _ = attr;
-        _ = to_set;
-        _ = fi;
+        if (req) |areq|
+        {
+            try log.logln_devel(log.LogLevel.info, @src(),
+                    "self [0x{X}] req [0x{X}] ino [0x{X}]",
+                    .{@intFromPtr(self), @intFromPtr(areq), ino});
+            // create sout_info
+            const sout_info = try g_allocator.create(sout_info_t);
+            errdefer g_allocator.destroy(sout_info);
+            try sout_info.init();
+            errdefer sout_info.deinit();
+            // create a temp parse
+            const sout = try parse.parse_t.create_from_slice(
+                    &g_allocator, &sout_info.out_data_slice);
+            defer sout.delete();
+            // header, skip and set later
+            try sout.check_rem(4);
+            sout.push_layer(4, 0);
+            // req, ino
+            try sout.check_rem(8 + 8 + 1);
+            sout.out_u64_le(@intFromPtr(areq));
+            sout.out_u64_le(ino);
+            if (attr) |aattr|
+            {
+                try log.logln_devel(log.LogLevel.info, @src(), "attr yes", .{});
+                sout.out_u8(1);
+                var mattr: structs.MyStat = .{};
+                toMyStat(aattr, &mattr);
+                try mattr.out(sout);
+            }
+            else
+            {
+                try log.logln_devel(log.LogLevel.info, @src(), "attr no", .{});
+                sout.out_u8(0);
+            }
+            try sout.check_rem(4 + 1);
+            sout.out_i32_le(to_set);
+            if (fi) |afi|
+            {
+                try log.logln_devel(log.LogLevel.info, @src(), "fi yes", .{});
+                sout.out_u8(1);
+                var mfi: structs.MyFileInfo = .{};
+                toMyFileInfo(afi, &mfi);
+                try mfi.out(sout);
+            }
+            else
+            {
+                try log.logln_devel(log.LogLevel.info, @src(), "fi no", .{});
+                sout.out_u8(0);
+            }
+            sout.push_layer(0, 1);
+            sout.pop_layer(0);
+            // header
+            const pdu_code = @intFromEnum(structs.MyFuseMsg.setattr);
+            sout.out_u16_le(pdu_code);
+            const pdu_size = sout.layer_subtract(1, 0);
+            sout.out_u16_le(pdu_size);
+            sout_info.msg_size = pdu_size;
+            // add to linked list
+            try self.append_sout(sout_info);
+            return;
+        }
         _ = c.fuse_reply_err(req, c.ENOENT);
     }
 
@@ -1049,10 +1349,40 @@ pub const fuse_session_t = struct
             ino: c.fuse_ino_t) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
-        _ = self;
-        _ = ino;
+        if (req) |areq|
+        {
+            try log.logln_devel(log.LogLevel.info, @src(),
+                    "self [0x{X}] req [0x{X}] ino [0x{X}]",
+                    .{@intFromPtr(self), @intFromPtr(areq), ino});
+            // create sout_info
+            const sout_info = try g_allocator.create(sout_info_t);
+            errdefer g_allocator.destroy(sout_info);
+            try sout_info.init();
+            errdefer sout_info.deinit();
+            // create a temp parse
+            const sout = try parse.parse_t.create_from_slice(
+                    &g_allocator, &sout_info.out_data_slice);
+            defer sout.delete();
+            // header, skip and set later
+            try sout.check_rem(4);
+            sout.push_layer(4, 0);
+            // req, ino
+            try sout.check_rem(8 + 8);
+            sout.out_u64_le(@intFromPtr(areq));
+            sout.out_u64_le(ino);
+            sout.push_layer(0, 1);
+            sout.pop_layer(0);
+            // header
+            const pdu_code = @intFromEnum(structs.MyFuseMsg.statfs);
+            sout.out_u16_le(pdu_code);
+            const pdu_size = sout.layer_subtract(1, 0);
+            sout.out_u16_le(pdu_size);
+            sout_info.msg_size = pdu_size;
+            // add to linked list
+            try self.append_sout(sout_info);
+            return;
+        }
         _ = c.fuse_reply_err(req, c.ENOENT);
-
     }
 
 };

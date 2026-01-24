@@ -10,6 +10,14 @@ const posix = std.posix;
 
 var g_allocator: std.mem.Allocator = std.heap.c_allocator;
 
+pub const MyFuseError = enum(i32)
+{
+    ENOENT      = 2,
+    EACCES      = 13,
+    ENOTDIR     = 20,
+    EISDIR      = 21,
+};
+
 pub const MyFuseMsg = enum(u16)
 {
     lookup      = 1,
@@ -29,6 +37,7 @@ pub const MyFuseMsg = enum(u16)
     opendir     = 15,
     releasedir  = 16,
     statfs      = 17,
+    end         = 18,
 };
 
 pub const MyFuseReplyMsg = enum(u16)
@@ -107,7 +116,7 @@ pub const MyStat = struct
 {
     st_dev: u64 = 0,
     st_ino: u64 = 0,
-    st_nlink: u32 = 0,
+    st_nlink: u64 = 0,
     st_mode: u32 = 0,
     st_uid: u32 = 0,
     st_gid: u32 = 0,
@@ -128,7 +137,7 @@ pub const MyStat = struct
         try sin.check_rem(3 * 8 + 3 * 4 + 10 * 8); // 116
         self.st_dev = sin.in_u64_le();
         self.st_ino = sin.in_u64_le();
-        self.st_nlink = sin.in_u32_le();
+        self.st_nlink = sin.in_u64_le();
         self.st_mode = sin.in_u32_le();
         self.st_uid = sin.in_u32_le();
         self.st_gid = sin.in_u32_le();
@@ -150,7 +159,7 @@ pub const MyStat = struct
         try sout.check_rem(3 * 8 + 3 * 4 + 10 * 8); // 116
         sout.out_u64_le(self.st_dev);
         sout.out_u64_le(self.st_ino);
-        sout.out_u32_le(self.st_nlink);
+        sout.out_u64_le(self.st_nlink);
         sout.out_u32_le(self.st_mode);
         sout.out_u32_le(self.st_uid);
         sout.out_u32_le(self.st_gid);

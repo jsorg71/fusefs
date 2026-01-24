@@ -289,7 +289,8 @@ const peer_info_t = struct
     }
 
     //*************************************************************************
-    fn send_reply_err(self: *peer_info_t, req: u64, ierr: i32) !void
+    fn send_reply_err(self: *peer_info_t, req: u64,
+            ierr: structs.MyFuseError) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
         const sout_info = try g_allocator.create(sout_info_t);
@@ -303,7 +304,8 @@ const peer_info_t = struct
         sout.push_layer(4, 0);
         try sout.check_rem(8 + 4);
         sout.out_u64_le(req);
-        sout.out_i32_le(ierr);
+        const err = @intFromEnum(ierr);
+        sout.out_i32_le(err);
         sout.push_layer(0, 1);
         const out_size = sout.layer_subtract(1, 0);
         sout.pop_layer(0);
@@ -323,7 +325,8 @@ const peer_info_t = struct
         const parent = sin.in_u64_le();
         const name_len = sin.in_u16_le();
         try sin.check_rem(name_len);
-        const name_slice = std.mem.sliceTo(sin.in_u8_slice(name_len), 0);
+        var name_slice = sin.in_u8_slice(name_len);
+        name_slice.len -= 1;
         try log.logln_devel(log.LogLevel.info, @src(),
                 "parent [{}] name [{s}]",
                 .{parent, name_slice});
@@ -357,7 +360,7 @@ const peer_info_t = struct
                 return;
             }
         }
-        try self.send_reply_err(req, 2); // ENOENT
+        try self.send_reply_err(req, structs.MyFuseError.ENOENT);
     }
 
     //*************************************************************************
@@ -385,7 +388,7 @@ const peer_info_t = struct
                 .{req, ino, size, off});
         if (ino != 1)
         {
-            try self.send_reply_err(req, 20); // ENOTDIR
+            try self.send_reply_err(req, structs.MyFuseError.ENOTDIR);
         }
         else
         {
@@ -405,6 +408,86 @@ const peer_info_t = struct
             dir_items[3].name = g_hello1_filename;
             try self.send_reply_buf_dir(req, size, off, dir_items);
         }
+    }
+
+    //*************************************************************************
+    fn process_mkdir(self: *peer_info_t, sin: *parse.parse_t) !void
+    {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        try sin.check_rem(8 + 8 + 2);
+        const req = sin.in_u64_le();
+        const parent = sin.in_u64_le();
+        const name_len = sin.in_u16_le();
+        try sin.check_rem(name_len + 4);
+        var name_slice = sin.in_u8_slice(name_len);
+        name_slice.len -= 1;
+        const mode = sin.in_u32_le();
+        try log.logln(log.LogLevel.info, @src(),
+                "parent [{}] name [{s}] mode [{}]",
+                .{parent, name_slice, mode});
+        try self.send_reply_err(req, structs.MyFuseError.ENOTDIR);
+    }
+
+    //*************************************************************************
+    fn process_rmdir(self: *peer_info_t, sin: *parse.parse_t) !void
+    {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        try sin.check_rem(8 + 8 + 2);
+        const req = sin.in_u64_le();
+        const parent = sin.in_u64_le();
+        const name_len = sin.in_u16_le();
+        try sin.check_rem(name_len);
+        var name_slice = sin.in_u8_slice(name_len);
+        name_slice.len -= 1;
+        try log.logln(log.LogLevel.info, @src(),
+                "parent [{}] name [{s}]",
+                .{parent, name_slice});
+        try self.send_reply_err(req, structs.MyFuseError.ENOTDIR);
+    }
+
+    //*************************************************************************
+    fn process_unlink(self: *peer_info_t, sin: *parse.parse_t) !void
+    {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        try sin.check_rem(8 + 8 + 2);
+        const req = sin.in_u64_le();
+        const parent = sin.in_u64_le();
+        const name_len = sin.in_u16_le();
+        try sin.check_rem(name_len);
+        var name_slice = sin.in_u8_slice(name_len);
+        name_slice.len -= 1;
+        try log.logln(log.LogLevel.info, @src(),
+                "parent [{}] name [{s}]",
+                .{parent, name_slice});
+        try self.send_reply_err(req, structs.MyFuseError.ENOTDIR);
+    }
+
+    //*************************************************************************
+    fn process_rename(self: *peer_info_t, sin: *parse.parse_t) !void
+    {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        try sin.check_rem(8 + 8 + 2);
+        const req = sin.in_u64_le();
+        const old_parent = sin.in_u64_le();
+        const old_name_len = sin.in_u16_le();
+        try sin.check_rem(old_name_len + 8 + 2);
+        var old_name_slice = sin.in_u8_slice(old_name_len);
+        old_name_slice.len -= 1;
+        const new_parent = sin.in_u64_le();
+        const new_name_len = sin.in_u16_le();
+        try log.logln_devel(log.LogLevel.info, @src(),
+                "old_name_len [{}] new_name_len [{}]",
+                .{old_name_len, new_name_len});
+        try sin.check_rem(new_name_len + 4);
+        var new_name_slice = sin.in_u8_slice(new_name_len);
+        new_name_slice.len -= 1;
+        const flags = sin.in_u32_le();
+        try log.logln(log.LogLevel.info, @src(),
+                "old_parent [{}] old_name [{s}] " ++
+                "new_parent [{}] new_name [{s}], flags {}",
+                .{old_parent, old_name_slice,
+                new_parent, new_name_slice, flags});
+        try self.send_reply_err(req, structs.MyFuseError.ENOTDIR);
     }
 
     //*************************************************************************
@@ -429,11 +512,11 @@ const peer_info_t = struct
 
         if ((ino != 2) and (ino != 3))
         {
-            try self.send_reply_err(req, 21); // EISDIR
+            try self.send_reply_err(req, structs.MyFuseError.EISDIR);
         }
         // else if ((fi.flags & 3) != 0) // 0 = O_RDONLY
         // {
-        //     try self.send_reply_err(req, 13); // EACCES
+        //     try self.send_reply_err(req, structs.MyFuseError.EACCES);
         // }
         else
         {
@@ -500,7 +583,7 @@ const peer_info_t = struct
                 .{req, ino, size, off});
         if (ino != 2 and ino != 3)
         {
-            try self.send_reply_err(req, 2); // ENOENT
+            try self.send_reply_err(req, structs.MyFuseError.ENOENT);
         }
         else
         {
@@ -555,7 +638,7 @@ const peer_info_t = struct
                 .{req, ino, size, off});
         if (ino != 2 and ino != 3)
         {
-            try self.send_reply_err(req, 2); // ENOENT
+            try self.send_reply_err(req, structs.MyFuseError.ENOENT);
         }
         else
         {
@@ -583,6 +666,60 @@ const peer_info_t = struct
     }
 
     //*************************************************************************
+    fn process_create(self: *peer_info_t, sin: *parse.parse_t) !void
+    {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        try sin.check_rem(8 + 8 + 2);
+        const req = sin.in_u64_le();
+        const parent = sin.in_u64_le();
+        const name_len = sin.in_u16_le();
+        try sin.check_rem(name_len + 4 + 1);
+        var name_str = sin.in_u8_slice(name_len);
+        name_str.len -= 1;
+        const mode = sin.in_u32_le();
+        var fi: structs.MyFileInfo = .{};
+        const got_fi = sin.in_u8();
+        if (got_fi != 0)
+        {
+            try log.logln_devel(log.LogLevel.info, @src(), "fi yes", .{});
+            try fi.in(sin);
+        }
+        else
+        {
+            try log.logln_devel(log.LogLevel.info, @src(), "fi no", .{});
+        }
+        try log.logln_devel(log.LogLevel.info, @src(),
+                "req 0x{X} parent 0x{X} mode {}",
+                .{req, parent, mode});
+        try self.send_reply_err(req, structs.MyFuseError.ENOENT);
+    }
+
+    //*************************************************************************
+    fn process_fsync(self: *peer_info_t, sin: *parse.parse_t) !void
+    {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        try sin.check_rem(8 + 8 + 4 + 1);
+        const req = sin.in_u64_le();
+        const ino = sin.in_u64_le();
+        const datasync = sin.in_i32_le();
+        var fi: structs.MyFileInfo = .{};
+        const got_fi = sin.in_u8();
+        if (got_fi != 0)
+        {
+            try log.logln_devel(log.LogLevel.info, @src(), "fi yes", .{});
+            try fi.in(sin);
+        }
+        else
+        {
+            try log.logln_devel(log.LogLevel.info, @src(), "fi no", .{});
+        }
+        try log.logln_devel(log.LogLevel.info, @src(),
+                "req 0x{X} ino 0x{X} datasync {}",
+                .{req, ino, datasync});
+        try self.send_reply_err(req, structs.MyFuseError.ENOENT);
+    }
+
+    //*************************************************************************
     fn process_getattr(self: *peer_info_t, sin: *parse.parse_t) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
@@ -607,7 +744,7 @@ const peer_info_t = struct
         
         if ((ino != 1) and (ino != 2) and (ino != 3))
         {
-            try self.send_reply_err(req, 2); // ENOENT
+            try self.send_reply_err(req, structs.MyFuseError.ENOENT);
         }
         else
         {
@@ -654,6 +791,44 @@ const peer_info_t = struct
     }
 
     //*************************************************************************
+    fn process_setattr(self: *peer_info_t, sin: *parse.parse_t) !void
+    {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        try sin.check_rem(8 + 8 + 1);
+        const req = sin.in_u64_le();
+        const ino = sin.in_u64_le();
+        const got_attr = sin.in_u8();
+        var attr: structs.MyStat = .{};
+        if (got_attr != 0)
+        {
+            try log.logln_devel(log.LogLevel.info, @src(), "attr yes", .{});
+            try attr.in(sin);
+        }
+        else
+        {
+            try log.logln_devel(log.LogLevel.info, @src(), "attr no", .{});
+        }
+        try sin.check_rem(4 + 1);
+        const to_set = sin.in_i32_le();
+        const got_fi = sin.in_u8();
+        var fi: structs.MyFileInfo = .{};
+        if (got_fi != 0)
+        {
+            try log.logln_devel(log.LogLevel.info, @src(), "fi yes", .{});
+            try fi.in(sin);
+        }
+        else
+        {
+            try log.logln_devel(log.LogLevel.info, @src(), "fi no", .{});
+        }
+        try log.logln_devel(log.LogLevel.info, @src(),
+                "req 0x{X} ino 0x{X} flags 0x{X} " ++
+                "padding 0x{X} fh 0x{X} to_set {}",
+                .{req, ino, fi.flags, fi.padding, fi.fh, to_set});
+        try self.send_reply_err(req, structs.MyFuseError.EACCES);
+    }
+
+    //*************************************************************************
     fn process_opendir(self: *peer_info_t, sin: *parse.parse_t) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
@@ -677,7 +852,7 @@ const peer_info_t = struct
                 .{req, ino, fi.flags, fi.padding, fi.fh});
         if (ino != 1)
         {
-            try self.send_reply_err(req, 20); // ENOTDIR
+            try self.send_reply_err(req, structs.MyFuseError.ENOTDIR);
         }
         else
         {
@@ -685,6 +860,50 @@ const peer_info_t = struct
         }
     }
 
+    //*************************************************************************
+    fn process_releasedir(self: *peer_info_t, sin: *parse.parse_t) !void
+    {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        try sin.check_rem(8 + 8 + 1);
+        const req = sin.in_u64_le();
+        const ino = sin.in_u64_le();
+        const got_fi = sin.in_u8();
+        var fi: structs.MyFileInfo = .{};
+        if (got_fi != 0)
+        {
+            try log.logln_devel(log.LogLevel.info, @src(), "fi yes", .{});
+            try fi.in(sin);
+        }
+        else
+        {
+            try log.logln_devel(log.LogLevel.info, @src(), "fi no", .{});
+        }
+        try log.logln_devel(log.LogLevel.info, @src(),
+                "req 0x{X} ino 0x{X} flags 0x{X} " ++
+                "padding 0x{X} fh 0x{X}",
+                .{req, ino, fi.flags, fi.padding, fi.fh});
+        if (ino != 1)
+        {
+            try self.send_reply_err(req, structs.MyFuseError.ENOTDIR);
+        }
+        else
+        {
+        }
+    }
+
+    //*************************************************************************
+    fn process_statfs(self: *peer_info_t, sin: *parse.parse_t) !void
+    {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        try sin.check_rem(8 + 8);
+        const req = sin.in_u64_le();
+        const ino = sin.in_u64_le();
+        try log.logln_devel(log.LogLevel.info, @src(),
+                "req 0x{X} ino 0x{X}",
+                .{req, ino});
+        try self.send_reply_err(req, structs.MyFuseError.EACCES);
+    }
+    
     //*************************************************************************
     fn process_other(self: *peer_info_t, pdu_code: structs.MyFuseMsg) !void
     {
@@ -705,12 +924,21 @@ const peer_info_t = struct
         {
             .lookup => self.process_lookup(sin),
             .readdir => self.process_readdir(sin),
+            .mkdir => self.process_mkdir(sin),
+            .rmdir => self.process_rmdir(sin),
+            .unlink => self.process_unlink(sin),
+            .rename => self.process_rename(sin),
             .open => self.process_open(sin),
             .release => self.process_release(sin),
             .read => self.process_read(sin),
             .write => self.process_write(sin),
+            .create => self.process_create(sin),
+            .fsync => self.process_fsync(sin),
             .getattr => self.process_getattr(sin),
+            .setattr => self.process_setattr(sin),
             .opendir => self.process_opendir(sin),
+            .releasedir => self.process_releasedir(sin),
+            .statfs => self.process_statfs(sin),
             else => self.process_other(pdu_code),
         };
     }
