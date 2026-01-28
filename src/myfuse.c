@@ -202,14 +202,14 @@ myfuse_file_info_get(struct fuse_file_info* fi, int32_t* flags,
 
     *flags = fi->flags;
     lpadding = fi->writepage;
-    val = fi->direct_io;                lpadding = val << 1;
-    val = fi->keep_cache;               lpadding = val << 2;
-    val = fi->flush;                    lpadding = val << 3;
-    val = fi->nonseekable;              lpadding = val << 4;
-    val = fi->flock_release;            lpadding = val << 5;
-    val = fi->cache_readdir;            lpadding = val << 6;
-    val = fi->noflush;                  lpadding = val << 7;
-    val = fi->parallel_direct_writes;   lpadding = val << 8;
+    val = fi->direct_io;                lpadding |= val << 1;
+    val = fi->keep_cache;               lpadding |= val << 2;
+    val = fi->flush;                    lpadding |= val << 3;
+    val = fi->nonseekable;              lpadding |= val << 4;
+    val = fi->flock_release;            lpadding |= val << 5;
+    val = fi->cache_readdir;            lpadding |= val << 6;
+    val = fi->noflush;                  lpadding |= val << 7;
+    val = fi->parallel_direct_writes;   lpadding |= val << 8;
     *padding = lpadding;
     *fh = fi->fh;
     *lock_owner = fi->lock_owner;

@@ -207,14 +207,22 @@ pub const fuse_session_t = struct
         try mep.in(sin);
         var cep: c.fuse_entry_param = .{};
         fromMyEntryParam(&mep, &cep);
-        var mfi: structs.MyFileInfo = .{};
-        try mfi.in(sin);
-        const cfi = c.myfuse_file_info_create(mfi.flags, mfi.padding,
-                mfi.fh, mfi.lock_owner, mfi.poll_events, mfi.backing_id,
-                mfi.compat_flags);
         const req_ptr: *c.struct_fuse_req = @ptrFromInt(req);
-        _ = c.fuse_reply_create(req_ptr, &cep, cfi);
-        c.myfuse_file_info_delete(cfi);
+        const got_fi = sin.in_u8();
+        if (got_fi != 0)
+        {
+            var mfi: structs.MyFileInfo = .{};
+            try mfi.in(sin);
+            const cfi = c.myfuse_file_info_create(mfi.flags, mfi.padding,
+                    mfi.fh, mfi.lock_owner, mfi.poll_events, mfi.backing_id,
+                    mfi.compat_flags);
+            _ = c.fuse_reply_create(req_ptr, &cep, cfi);
+            c.myfuse_file_info_delete(cfi);
+        }
+        else
+        {
+            _ = c.fuse_reply_create(req_ptr, &cep, null);
+        }
     }
 
     //*************************************************************************
@@ -410,16 +418,16 @@ pub const fuse_session_t = struct
         return switch (pdu_code)
         {
             .statfs => self.process_reply_statfs(sin),
-            .attr => self.process_reply_attr(sin),
-            .create => self.process_reply_create(sin),
-            .write => self.process_reply_write(sin),
-            .buf => self.process_reply_buf(sin),
-            .buf_dir => self.process_reply_buf_dir(sin),
+            .attr => self.process_reply_attr(sin),          // yes
+            .create => self.process_reply_create(sin),      // yes
+            .write => self.process_reply_write(sin),        // yes
+            .buf => self.process_reply_buf(sin),            // yes
+            .buf_dir => self.process_reply_buf_dir(sin),    // yes
             .iov => self.process_reply_iov(sin),
             .data => self.process_reply_data(sin),
-            .open => self.process_reply_open(sin),
-            .entry => self.process_reply_entry(sin),
-            .err => self.process_reply_err(sin),
+            .open => self.process_reply_open(sin),          // yes
+            .entry => self.process_reply_entry(sin),        // yes
+            .err => self.process_reply_err(sin),            // yes
             else => self.process_other(pdu_code),
         };
     }

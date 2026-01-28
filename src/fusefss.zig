@@ -41,6 +41,63 @@ pub const FusefssError = error
     MsgTooBig,
 };
 
+const inode_dir_info_t = struct
+{
+    ino: u64 = 0,
+    path: []const u8 = &.{},
+    dir: ?*std.c.DIR = null,
+
+    //*************************************************************************
+    fn deinit(self: *inode_dir_info_t) void
+    {
+        g_allocator.free(self.path);
+        if (self.dir) |adir|
+        {
+            _ = std.c.closedir(adir);
+        }
+    }
+};
+
+const inode_file_info_t = struct
+{
+    ino: u64 = 0,
+    name: []const u8 = &.{},
+    fd: i32 = -1,
+
+    //*************************************************************************
+    fn deinit(self: *inode_file_info_t) void
+    {
+        g_allocator.free(self.name);
+        if (self.fd != -1)
+        {
+            _ = std.c.close(self.fd);
+        }
+    }
+};
+
+const inode_manager_info_t = struct
+{
+    num_dirs: usize = 0,
+    dirs: []inode_dir_info_t = &.{},
+    num_files: usize = 0,
+    files: []inode_file_info_t = &.{},
+
+    //*************************************************************************
+    fn deinit(self: *inode_manager_info_t) void
+    {
+        for (0..self.num_dirs) |index|
+        {
+            self.dirs[index].deinit();
+        }
+        g_allocator.free(self.dirs);
+        for (0..self.num_files) |index|
+        {
+            self.files[index].deinit();
+        }
+        g_allocator.free(self.files);
+    }
+};
+
 const sout_info_t = struct
 {
     out_data_slice: [64 * 1024]u8 = undefined,
@@ -73,6 +130,7 @@ const peer_info_t = struct
     msg_size: usize = 0,
     readed: usize = 0,
     next: ?*peer_info_t = null,
+    man: inode_manager_info_t = .{},
 
     //*************************************************************************
     fn init(self: *peer_info_t) !void
@@ -97,6 +155,7 @@ const peer_info_t = struct
         {
             posix.close(self.sck);
         }
+        self.man.deinit();
     }
 
     //*************************************************************************
@@ -137,6 +196,43 @@ const peer_info_t = struct
         const out_size = sout.layer_subtract(1, 0);
         sout.pop_layer(0);
         const code = @intFromEnum(structs.MyFuseReplyMsg.attr);
+        sout.out_u16_le(code);
+        sout.out_u16_le(out_size);
+        sout_info.msg_size = out_size;
+        try self.append_sout(sout_info);
+    }
+
+    //*************************************************************************
+    fn send_reply_create(self: *peer_info_t, req: u64,
+            mep: *structs.MyEntryParam, mfi: ?*structs.MyFileInfo) !void
+    {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        const sout_info = try g_allocator.create(sout_info_t);
+        errdefer g_allocator.destroy(sout_info);
+        try sout_info.init();
+        errdefer sout_info.deinit();
+        const sout = try parse.parse_t.create_from_slice(&g_allocator,
+                &sout_info.out_data_slice);
+        defer sout.delete();
+        try sout.check_rem(4);
+        sout.push_layer(4, 0);
+        try sout.check_rem(8);
+        sout.out_u64_le(req);
+        mep.out(sout);
+        try sout.check_rem(1);
+        if (mfi) |afi|
+        {
+            sout.out_u8(1);
+            afi.out(sout);
+        }
+        else
+        {
+            sout.out_u8(0);
+        }
+        sout.push_layer(0, 1);
+        const out_size = sout.layer_subtract(1, 0);
+        sout.pop_layer(0);
+        const code = @intFromEnum(structs.MyFuseReplyMsg.create);
         sout.out_u16_le(code);
         sout.out_u16_le(out_size);
         sout_info.msg_size = out_size;
@@ -898,7 +994,7 @@ const peer_info_t = struct
         try sin.check_rem(8 + 8);
         const req = sin.in_u64_le();
         const ino = sin.in_u64_le();
-        try log.logln_devel(log.LogLevel.info, @src(),
+        try log.logln(log.LogLevel.info, @src(),
                 "req 0x{X} ino 0x{X}",
                 .{req, ino});
         try self.send_reply_err(req, structs.MyFuseError.EACCES);
