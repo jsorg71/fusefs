@@ -38,6 +38,7 @@ pub const fusefsc_info_t = struct // just one of these
     in_data_slice: [64 * 1024]u8 = undefined,
     msg_size: usize = 0,
     readed: usize = 0,
+    connected: bool = false,
 
     //*************************************************************************
     fn init(self: *fusefsc_info_t) !void
@@ -94,7 +95,7 @@ pub const fusefsc_info_t = struct // just one of these
             const conn_index = poll_count;
             polls[poll_count].fd = self.sck;
             polls[poll_count].events = posix.POLL.IN;
-            if (self.fuse_session.sout_head != null)
+            if ((self.fuse_session.sout_head != null) or !self.connected)
             {
                 polls[poll_count].events |= posix.POLL.OUT;
             }
@@ -165,6 +166,14 @@ pub const fusefsc_info_t = struct // just one of these
                 {
                     try log.logln_devel(log.LogLevel.info, @src(),
                             "server socket set OUT", .{});
+                    if (!self.connected)
+                    {
+                        try log.logln(log.LogLevel.info, @src(),
+                                "got connected", .{});
+                        self.connected = true;
+                        // send version
+                        try self.fuse_session.send_version();
+                    }
                     if (self.fuse_session.sout_head) |asout|
                     {
                         const out_slice =

@@ -73,8 +73,19 @@ fn check_error(err: structs.MyFuseError, ierr: i32) !void
     const lerr = @intFromEnum(err);
     if (lerr != ierr)
     {
+        try log.logln(log.LogLevel.info, @src(),
+                "error code does not match for {} should be {}",
+                .{err, ierr});
         return FuseError.BadErrorCode;
     }
+}
+
+//*****************************************************************************
+fn mount_failed(mount_path: []const u8) anyerror
+{
+    try log.logln(log.LogLevel.info, @src(),
+            "mount failed for path {s}", .{mount_path});
+    return FuseError.FuseMountFailed;
 }
 
 pub const fuse_session_t = struct
@@ -94,14 +105,15 @@ pub const fuse_session_t = struct
         try check_error(structs.MyFuseError.EACCES, c.EACCES);
         try check_error(structs.MyFuseError.ENOTDIR, c.ENOTDIR);
         try check_error(structs.MyFuseError.EISDIR, c.EISDIR);
-        const rv = c.myfuse_create("/home/jay/test_mount", self, &self.mi);
+        const mount_path = "/home/jay/test_mount";
+        const rv = c.myfuse_create(mount_path, self, &self.mi);
         try log.logln(log.LogLevel.info, @src(), "myfuse_create rv {}", .{rv});
         return switch (rv)
         {
             0 => {},
             1 => FuseError.FuseAllocFailed,
             2 => FuseError.FuseNewFailed,
-            3 => FuseError.FuseMountFailed,
+            3 => mount_failed(mount_path),
             else => FuseError.FuseOtherFailed,
         };
     }
@@ -159,6 +171,36 @@ pub const fuse_session_t = struct
             self.sout_head = sout_info;
             self.sout_tail = sout_info;
         }
+    }
+
+    //*************************************************************************
+    pub fn send_version(self: *fuse_session_t) !void
+    {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        // create sout_info
+        const sout_info = try g_allocator.create(sout_info_t);
+        errdefer g_allocator.destroy(sout_info);
+        try sout_info.init();
+        errdefer sout_info.deinit();
+        // create a temp parse
+        const sout = try parse.parse_t.create_from_slice(
+                &g_allocator, &sout_info.out_data_slice);
+        defer sout.delete();
+        // header, skip and set later
+        try sout.check_rem(4);
+        sout.push_layer(4, 0);
+        try sout.check_rem(4);
+        sout.out_i32_le(structs.g_proto_version);
+        sout.push_layer(0, 1);
+        sout.pop_layer(0);
+        // header
+        const pdu_code = @intFromEnum(structs.MyFuseMsg.version);
+        sout.out_u16_le(pdu_code);
+        const pdu_size = sout.layer_subtract(1, 0);
+        sout.out_u16_le(pdu_size);
+        sout_info.msg_size = pdu_size;
+        // add to linked list
+        try self.append_sout(sout_info);
     }
 
     //*************************************************************************
@@ -344,7 +386,8 @@ pub const fuse_session_t = struct
                 buf.mem = mem_slice.ptr;
                 buf.fd = sin.in_i32_le();
                 buf.pos = sin.in_i64_le();
-                buf.mem_size = sin.in_u64_le();
+                //buf.mem_size = sin.in_u64_le();
+                _ = sin.in_u64_le();
                 c.myfuse_bufvec_set(abufv, index, &buf);
             }
             const flags = sin.in_u32_le();
@@ -417,7 +460,7 @@ pub const fuse_session_t = struct
         sin.in_u8_skip(2); // pdu_size
         return switch (pdu_code)
         {
-            .statfs => self.process_reply_statfs(sin),
+            .statfs => self.process_reply_statfs(sin),      // yes
             .attr => self.process_reply_attr(sin),          // yes
             .create => self.process_reply_create(sin),      // yes
             .write => self.process_reply_write(sin),        // yes
@@ -1487,7 +1530,7 @@ fn fromMyStatVfs(src: *structs.MyStatVfs, dst: *c.struct_statvfs) void
     dst.f_fsid = src.f_fsid;
     dst.f_flag = src.f_flag;
     dst.f_namemax = src.f_namemax;
-    dst.f_type = src.f_type;
+    //dst.f_type = src.f_type;
 }
 
 //*****************************************************************************

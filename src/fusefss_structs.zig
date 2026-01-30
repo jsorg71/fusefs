@@ -10,6 +10,20 @@ const posix = std.posix;
 
 var g_allocator: std.mem.Allocator = std.heap.c_allocator;
 
+pub const g_proto_version: i32 = 1;
+
+pub const S_IFDIR: i32 = 0o0040000; // Directory.
+#define	__S_IFCHR	0o0020000	/* Character device.  */
+#define	__S_IFBLK	0o0060000	/* Block device.  */
+pub const S_IFREG: i32 = 0o0100000;
+pub const S_IFIFO: i32 = 0o0010000;
+
+#define	__S_IFIFO	0010000	/* FIFO.  */
+#define	__S_IFLNK	0120000	/* Symbolic link.  */
+#define	__S_IFSOCK	0140000	/* Socket.  */
+
+
+
 pub const MyFuseError = enum(i32)
 {
     ENOENT      = 2,
@@ -37,7 +51,8 @@ pub const MyFuseMsg = enum(u16)
     opendir     = 15,
     releasedir  = 16,
     statfs      = 17,
-    end         = 18,
+    version     = 18,
+    end         = 19,
 };
 
 pub const MyFuseReplyMsg = enum(u16)

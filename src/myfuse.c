@@ -209,13 +209,13 @@ myfuse_file_info_get(struct fuse_file_info* fi, int32_t* flags,
     val = fi->flock_release;            lpadding |= val << 5;
     val = fi->cache_readdir;            lpadding |= val << 6;
     val = fi->noflush;                  lpadding |= val << 7;
-    val = fi->parallel_direct_writes;   lpadding |= val << 8;
+    //val = fi->parallel_direct_writes;   lpadding |= val << 8;
     *padding = lpadding;
     *fh = fi->fh;
     *lock_owner = fi->lock_owner;
     *poll_events = fi->poll_events;
-    *backing_id = fi->backing_id;
-    *compat_flags = fi->compat_flags;
+    *backing_id = 0; // fi->backing_id;
+    *compat_flags = 0; // fi->compat_flags;
 }
 
 //*****************************************************************************
@@ -240,12 +240,12 @@ myfuse_file_info_create(int32_t flags,
     fi->flock_release           = (padding >> 5) & 1;
     fi->cache_readdir           = (padding >> 6) & 1;
     fi->noflush                 = (padding >> 7) & 1;
-    fi->parallel_direct_writes  = (padding >> 8) & 1;
+    //fi->parallel_direct_writes  = (padding >> 8) & 1;
     fi->fh = fh;
     fi->lock_owner = lock_owner;
     fi->poll_events = poll_events;
-    fi->backing_id = backing_id;
-    fi->compat_flags = compat_flags;
+    //fi->backing_id = backing_id;
+    //fi->compat_flags = compat_flags;
     return fi;
 }
 

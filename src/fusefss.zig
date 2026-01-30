@@ -39,6 +39,7 @@ pub const FusefssError = error
     ShowCommandLine,
     TooManyFds,
     MsgTooBig,
+    BadProtoVersion,
 };
 
 const inode_dir_info_t = struct
@@ -171,6 +172,33 @@ const peer_info_t = struct
             self.sout_head = sout_info;
             self.sout_tail = sout_info;
         }
+    }
+
+    //*************************************************************************
+    fn send_reply_statfs(self: *peer_info_t, req: u64,
+            mstat: *structs.MyStatVfs) !void
+    {
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        const sout_info = try g_allocator.create(sout_info_t);
+        errdefer g_allocator.destroy(sout_info);
+        try sout_info.init();
+        errdefer sout_info.deinit();
+        const sout = try parse.parse_t.create_from_slice(&g_allocator,
+                &sout_info.out_data_slice);
+        defer sout.delete();
+        try sout.check_rem(4);
+        sout.push_layer(4, 0);
+        try sout.check_rem(8);
+        sout.out_u64_le(req);
+        try mstat.out(sout);
+        sout.push_layer(0, 1);
+        const out_size = sout.layer_subtract(1, 0);
+        sout.pop_layer(0);
+        const code = @intFromEnum(structs.MyFuseReplyMsg.statfs);
+        sout.out_u16_le(code);
+        sout.out_u16_le(out_size);
+        sout_info.msg_size = out_size;
+        try self.append_sout(sout_info);
     }
 
     //*************************************************************************
@@ -997,7 +1025,29 @@ const peer_info_t = struct
         try log.logln(log.LogLevel.info, @src(),
                 "req 0x{X} ino 0x{X}",
                 .{req, ino});
-        try self.send_reply_err(req, structs.MyFuseError.EACCES);
+        if (ino > 3)
+        {
+            try self.send_reply_err(req, structs.MyFuseError.EACCES);
+        }
+        var mstat: structs.MyStatVfs = .{};
+        mstat.f_bavail = 1000;
+        try self.send_reply_statfs(req, &mstat);
+    }
+
+    //*************************************************************************
+    fn process_version(self: *peer_info_t, sin: *parse.parse_t) !void
+    {
+        _ = self;
+        try log.logln(log.LogLevel.info, @src(), "", .{});
+        try sin.check_rem(4);
+        const ver = sin.in_u32_le();
+        try log.logln(log.LogLevel.info, @src(),
+                "ver 0x{X} g_proto_version 0x{X}",
+                .{ver, structs.g_proto_version});
+        if (ver != structs.g_proto_version)
+        {
+            return FusefssError.BadProtoVersion;
+        }
     }
     
     //*************************************************************************
@@ -1035,6 +1085,7 @@ const peer_info_t = struct
             .opendir => self.process_opendir(sin),
             .releasedir => self.process_releasedir(sin),
             .statfs => self.process_statfs(sin),
+            .version => self.process_version(sin),
             else => self.process_other(pdu_code),
         };
     }
