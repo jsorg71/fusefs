@@ -712,7 +712,7 @@ const peer_info_t = struct
         try sin.check_rem(3 * 8);
         const req = sin.in_u64_le();
         const ino = sin.in_u64_le();
-        const size = sin.in_u64_le();
+        const size = sin.in_u16_le();
         try sin.check_rem(size);
         const buf = sin.in_u8_slice(size);
         try sin.check_rem(8 + 1);

@@ -916,13 +916,13 @@ pub const fuse_session_t = struct
             sout.out_u64_le(ino);
             if (buf) |abuf|
             {
-                sout.out_u64_le(size);
+                sout.out_u16_le(@intCast(size));
                 try sout.check_rem(size);
                 sout.out_u8_slice(abuf[0..size]);
             }
             else
             {
-                sout.out_u64_le(0);
+                sout.out_u16_le(0);
             }
             try sout.check_rem(8 + 1);
             sout.out_i64_le(off);
