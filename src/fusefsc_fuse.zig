@@ -42,36 +42,10 @@ fn cb_error_int(src: std.builtin.SourceLocation, err: anyerror,
     return rv;
 }
 
-const sout_info_t = struct
-{
-    out_data_slice: [64 * 1024]u8 = undefined,
-    msg_size: usize = 0,
-    sent: usize = 0,
-    next: ?*sout_info_t = null,
-
-    //*************************************************************************
-    fn init(self: *sout_info_t) !void
-    {
-        try log.logln_devel(log.LogLevel.info, @src(),
-                "sout_info_t", .{});
-        self.* = .{};
-    }
-
-    //*************************************************************************
-    pub fn deinit(self: *sout_info_t) void
-    {
-        log.logln_devel(log.LogLevel.info, @src(),
-                "sout_info_t", .{}) catch return;
-        _ = self;
-    }
-
-};
-
 //*****************************************************************************
-fn check_error(err: structs.MyFuseError, ierr: i32) !void
+fn check_error(err: i32, ierr: i32) !void
 {
-    const lerr = @intFromEnum(err);
-    if (lerr != ierr)
+    if (err != ierr)
     {
         try log.logln(log.LogLevel.info, @src(),
                 "error code does not match for {} should be {}",
@@ -88,6 +62,8 @@ fn mount_failed(mount_path: []const u8) anyerror
     return FuseError.FuseMountFailed;
 }
 
+const sout_info_t = structs.sout_info_t;
+
 pub const fuse_session_t = struct
 {
     mi: ?*anyopaque = null,
@@ -101,10 +77,10 @@ pub const fuse_session_t = struct
                 "fuse_session_t", .{});
         self.* = .{};
         // make sure errors values match
-        try check_error(structs.MyFuseError.ENOENT, c.ENOENT);
-        try check_error(structs.MyFuseError.EACCES, c.EACCES);
-        try check_error(structs.MyFuseError.ENOTDIR, c.ENOTDIR);
-        try check_error(structs.MyFuseError.EISDIR, c.EISDIR);
+        try check_error(structs.ENOENT, c.ENOENT);
+        try check_error(structs.EACCES, c.EACCES);
+        try check_error(structs.ENOTDIR, c.ENOTDIR);
+        try check_error(structs.EISDIR, c.EISDIR);
         const mount_path = "/home/jay/test_mount";
         const rv = c.myfuse_create(mount_path, self, &self.mi);
         try log.logln(log.LogLevel.info, @src(), "myfuse_create rv {}", .{rv});
@@ -339,64 +315,6 @@ pub const fuse_session_t = struct
     }
 
     //*************************************************************************
-    fn process_reply_iov(self: *fuse_session_t, sin: *parse.parse_t) !void
-    {
-        _ = self;
-        try log.logln(log.LogLevel.info, @src(), "", .{});
-        try sin.check_rem(12);
-        const req = sin.in_u64_le();
-        const count = sin.in_u32_le();
-        const iovecs = try g_allocator.alloc(c.struct_iovec, count);
-        defer g_allocator.free(iovecs);
-        for (0..count) |index|
-        {
-            try sin.check_rem(8);
-            const iov_size = sin.in_u64_le();
-            try sin.check_rem(iov_size);
-            const iov_base_slice = sin.in_u8_slice(iov_size);
-            iovecs[index] = .{};
-            iovecs[index].iov_len = iov_size;
-            iovecs[index].iov_base = iov_base_slice.ptr;
-        }
-        const req_ptr: *c.struct_fuse_req = @ptrFromInt(req);
-        _ = c.fuse_reply_iov(req_ptr, iovecs.ptr, @intCast(count));
-    }
-
-    //*************************************************************************
-    fn process_reply_data(self: *fuse_session_t, sin: *parse.parse_t) !void
-    {
-        _ = self;
-        try log.logln(log.LogLevel.info, @src(), "", .{});
-        try sin.check_rem(16);
-        const req = sin.in_u64_le();
-        const count = sin.in_u64_le();
-        const bufv: ?*c.fuse_bufvec = c.myfuse_bufvec_create(count);
-        if (bufv) |abufv|
-        {
-            defer c.myfuse_bufvec_delete(abufv);
-            abufv.count = count;
-            abufv.idx = sin.in_u64_le();
-            abufv.off = sin.in_u64_le();
-            for (0..count) | index|
-            {
-                var buf: c.fuse_buf = .{};
-                buf.size = sin.in_u64_le();
-                buf.flags = sin.in_u32_le();
-                const mem_slice = sin.in_u8_slice(buf.size);
-                buf.mem = mem_slice.ptr;
-                buf.fd = sin.in_i32_le();
-                buf.pos = sin.in_i64_le();
-                //buf.mem_size = sin.in_u64_le();
-                _ = sin.in_u64_le();
-                c.myfuse_bufvec_set(abufv, index, &buf);
-            }
-            const flags = sin.in_u32_le();
-            const req_ptr: *c.struct_fuse_req = @ptrFromInt(req);
-            _ = c.fuse_reply_data(req_ptr, abufv, flags);
-        }
-    }
-
-    //*************************************************************************
     fn process_reply_open(self: *fuse_session_t, sin: *parse.parse_t) !void
     {
         _ = self;
@@ -460,17 +378,15 @@ pub const fuse_session_t = struct
         sin.in_u8_skip(2); // pdu_size
         return switch (pdu_code)
         {
-            .statfs => self.process_reply_statfs(sin),      // yes
-            .attr => self.process_reply_attr(sin),          // yes
-            .create => self.process_reply_create(sin),      // yes
-            .write => self.process_reply_write(sin),        // yes
-            .buf => self.process_reply_buf(sin),            // yes
-            .buf_dir => self.process_reply_buf_dir(sin),    // yes
-            .iov => self.process_reply_iov(sin),
-            .data => self.process_reply_data(sin),
-            .open => self.process_reply_open(sin),          // yes
-            .entry => self.process_reply_entry(sin),        // yes
-            .err => self.process_reply_err(sin),            // yes
+            .statfs => self.process_reply_statfs(sin),
+            .attr => self.process_reply_attr(sin),
+            .create => self.process_reply_create(sin),
+            .write => self.process_reply_write(sin),
+            .buf => self.process_reply_buf(sin),
+            .buf_dir => self.process_reply_buf_dir(sin),
+            .open => self.process_reply_open(sin),
+            .entry => self.process_reply_entry(sin),
+            .err => self.process_reply_err(sin),
             else => self.process_other(pdu_code),
         };
     }

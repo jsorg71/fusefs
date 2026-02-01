@@ -19,16 +19,8 @@ var g_config_file: [128:0]u8 =
 var g_hello_fd: [256]u8 = undefined;
 var g_hello1_fd: [256]u8 = undefined;
 
-//const g_hello_filedata = "Hello World!" ++
-//        "  This is a test of the emergency broadcasting system." ++
-//        "  This is only a test.\n";
-
 var g_hello_filedata: []u8 = g_hello_fd[0..0];
 const g_hello_filename = "hello";
-
-//const g_hello1_filedata = "Hello1 World!" ++
-//        "  This is a test of the emergency broadcasting system." ++
-//        "  This is only a test.\n";
 
 var g_hello1_filedata: []u8 = g_hello1_fd[0..0];
 const g_hello1_filename = "hello1";
@@ -99,26 +91,7 @@ const inode_manager_info_t = struct
     }
 };
 
-const sout_info_t = struct
-{
-    out_data_slice: [64 * 1024]u8 = undefined,
-    msg_size: usize = 0,
-    sent: usize = 0,
-    next: ?*sout_info_t = null,
-
-    //*************************************************************************
-    fn init(self: *sout_info_t) !void
-    {
-        self.* = .{};
-    }
-
-    //*************************************************************************
-    fn deinit(self: *sout_info_t) void
-    {
-        _ = self;
-    }
-
-};
+const sout_info_t = structs.sout_info_t;
 
 const peer_info_t = struct
 {
@@ -413,8 +386,7 @@ const peer_info_t = struct
     }
 
     //*************************************************************************
-    fn send_reply_err(self: *peer_info_t, req: u64,
-            ierr: structs.MyFuseError) !void
+    fn send_reply_err(self: *peer_info_t, req: u64, ierr: i32) !void
     {
         try log.logln(log.LogLevel.info, @src(), "", .{});
         const sout_info = try g_allocator.create(sout_info_t);
@@ -428,8 +400,7 @@ const peer_info_t = struct
         sout.push_layer(4, 0);
         try sout.check_rem(8 + 4);
         sout.out_u64_le(req);
-        const err = @intFromEnum(ierr);
-        sout.out_i32_le(err);
+        sout.out_i32_le(ierr);
         sout.push_layer(0, 1);
         const out_size = sout.layer_subtract(1, 0);
         sout.pop_layer(0);
@@ -484,7 +455,7 @@ const peer_info_t = struct
                 return;
             }
         }
-        try self.send_reply_err(req, structs.MyFuseError.ENOENT);
+        try self.send_reply_err(req, structs.ENOENT);
     }
 
     //*************************************************************************
@@ -512,7 +483,7 @@ const peer_info_t = struct
                 .{req, ino, size, off});
         if (ino != 1)
         {
-            try self.send_reply_err(req, structs.MyFuseError.ENOTDIR);
+            try self.send_reply_err(req, structs.ENOTDIR);
         }
         else
         {
@@ -549,7 +520,7 @@ const peer_info_t = struct
         try log.logln(log.LogLevel.info, @src(),
                 "parent [{}] name [{s}] mode [{}]",
                 .{parent, name_slice, mode});
-        try self.send_reply_err(req, structs.MyFuseError.ENOTDIR);
+        try self.send_reply_err(req, structs.ENOTDIR);
     }
 
     //*************************************************************************
@@ -566,7 +537,7 @@ const peer_info_t = struct
         try log.logln(log.LogLevel.info, @src(),
                 "parent [{}] name [{s}]",
                 .{parent, name_slice});
-        try self.send_reply_err(req, structs.MyFuseError.ENOTDIR);
+        try self.send_reply_err(req, structs.ENOTDIR);
     }
 
     //*************************************************************************
@@ -583,7 +554,7 @@ const peer_info_t = struct
         try log.logln(log.LogLevel.info, @src(),
                 "parent [{}] name [{s}]",
                 .{parent, name_slice});
-        try self.send_reply_err(req, structs.MyFuseError.ENOTDIR);
+        try self.send_reply_err(req, structs.ENOTDIR);
     }
 
     //*************************************************************************
@@ -611,7 +582,7 @@ const peer_info_t = struct
                 "new_parent [{}] new_name [{s}], flags {}",
                 .{old_parent, old_name_slice,
                 new_parent, new_name_slice, flags});
-        try self.send_reply_err(req, structs.MyFuseError.ENOTDIR);
+        try self.send_reply_err(req, structs.ENOTDIR);
     }
 
     //*************************************************************************
@@ -636,11 +607,11 @@ const peer_info_t = struct
 
         if ((ino != 2) and (ino != 3))
         {
-            try self.send_reply_err(req, structs.MyFuseError.EISDIR);
+            try self.send_reply_err(req, structs.EISDIR);
         }
         // else if ((fi.flags & 3) != 0) // 0 = O_RDONLY
         // {
-        //     try self.send_reply_err(req, structs.MyFuseError.EACCES);
+        //     try self.send_reply_err(req, structs.EACCES);
         // }
         else
         {
@@ -707,7 +678,7 @@ const peer_info_t = struct
                 .{req, ino, size, off});
         if (ino != 2 and ino != 3)
         {
-            try self.send_reply_err(req, structs.MyFuseError.ENOENT);
+            try self.send_reply_err(req, structs.ENOENT);
         }
         else
         {
@@ -762,7 +733,7 @@ const peer_info_t = struct
                 .{req, ino, size, off});
         if (ino != 2 and ino != 3)
         {
-            try self.send_reply_err(req, structs.MyFuseError.ENOENT);
+            try self.send_reply_err(req, structs.ENOENT);
         }
         else
         {
@@ -812,10 +783,10 @@ const peer_info_t = struct
         {
             try log.logln_devel(log.LogLevel.info, @src(), "fi no", .{});
         }
-        try log.logln_devel(log.LogLevel.info, @src(),
-                "req 0x{X} parent 0x{X} mode {}",
-                .{req, parent, mode});
-        try self.send_reply_err(req, structs.MyFuseError.ENOENT);
+        try log.logln(log.LogLevel.info, @src(),
+                "req 0x{X} name {s} parent 0x{X} mode {}",
+                .{req, name_str, parent, mode});
+        try self.send_reply_err(req, structs.ENOENT);
     }
 
     //*************************************************************************
@@ -840,7 +811,7 @@ const peer_info_t = struct
         try log.logln_devel(log.LogLevel.info, @src(),
                 "req 0x{X} ino 0x{X} datasync {}",
                 .{req, ino, datasync});
-        try self.send_reply_err(req, structs.MyFuseError.ENOENT);
+        try self.send_reply_err(req, structs.ENOENT);
     }
 
     //*************************************************************************
@@ -868,7 +839,7 @@ const peer_info_t = struct
         
         if ((ino != 1) and (ino != 2) and (ino != 3))
         {
-            try self.send_reply_err(req, structs.MyFuseError.ENOENT);
+            try self.send_reply_err(req, structs.ENOENT);
         }
         else
         {
@@ -876,7 +847,7 @@ const peer_info_t = struct
             stat.st_ino = ino;
             if (ino == 1)
             {
-                stat.st_mode = 0o0040000 | 0o0755; // S_IFDIR | 0755;
+                stat.st_mode = structs.S_IFDIR | 0o0755; // S_IFDIR | 0755;
                 stat.st_nlink = 2;
                 stat.st_size = 4096;
                 stat.st_uid = 1000;
@@ -888,7 +859,7 @@ const peer_info_t = struct
             }
             else if (ino == 2)
             {
-                stat.st_mode = 0o0100000 | 0o0444; // S_IFREG | 0444;
+                stat.st_mode = structs.S_IFREG | 0o0444; // S_IFREG | 0444;
                 stat.st_nlink = 2;
                 stat.st_size = @intCast(g_hello_filedata.len);
                 stat.st_uid = 1000;
@@ -900,7 +871,7 @@ const peer_info_t = struct
             }
             else
             {
-                stat.st_mode = 0o0100000 | 0o0444; // S_IFREG | 0444;
+                stat.st_mode = structs.S_IFREG | 0o0444; // S_IFREG | 0444;
                 stat.st_nlink = 2;
                 stat.st_size = @intCast(g_hello1_filedata.len);
                 stat.st_uid = 1000;
@@ -949,7 +920,7 @@ const peer_info_t = struct
                 "req 0x{X} ino 0x{X} flags 0x{X} " ++
                 "padding 0x{X} fh 0x{X} to_set {}",
                 .{req, ino, fi.flags, fi.padding, fi.fh, to_set});
-        try self.send_reply_err(req, structs.MyFuseError.EACCES);
+        try self.send_reply_err(req, structs.EACCES);
     }
 
     //*************************************************************************
@@ -976,7 +947,7 @@ const peer_info_t = struct
                 .{req, ino, fi.flags, fi.padding, fi.fh});
         if (ino != 1)
         {
-            try self.send_reply_err(req, structs.MyFuseError.ENOTDIR);
+            try self.send_reply_err(req, structs.ENOTDIR);
         }
         else
         {
@@ -1008,7 +979,7 @@ const peer_info_t = struct
                 .{req, ino, fi.flags, fi.padding, fi.fh});
         if (ino != 1)
         {
-            try self.send_reply_err(req, structs.MyFuseError.ENOTDIR);
+            try self.send_reply_err(req, structs.ENOTDIR);
         }
         else
         {
@@ -1027,7 +998,7 @@ const peer_info_t = struct
                 .{req, ino});
         if (ino > 3)
         {
-            try self.send_reply_err(req, structs.MyFuseError.EACCES);
+            try self.send_reply_err(req, structs.EACCES);
         }
         var mstat: structs.MyStatVfs = .{};
         mstat.f_bavail = 1000;
@@ -1107,8 +1078,6 @@ pub const fusefss_info_t = struct // just one of these
     //*************************************************************************
     fn deinit(self: *fusefss_info_t) void
     {
-        //log.logln(log.LogLevel.info, @src(),
-        //            "sck {}", .{self.sck}) catch return;
         if (self.sck != -1)
         {
             posix.close(self.sck);
@@ -1326,7 +1295,6 @@ pub const fusefss_info_t = struct // just one of these
         const address = net.Address.initIp4([4]u8{ 127, 0, 0, 1 }, 5055);
         const tpe: u32 = posix.SOCK.STREAM;
         self.sck = try posix.socket(address.any.family, tpe, 0);
-        //defer posix.close(self.sck);
         // SO_REUSEADDR
         try posix.setsockopt(self.sck,
                 posix.SOL.SOCKET,

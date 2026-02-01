@@ -12,24 +12,44 @@ var g_allocator: std.mem.Allocator = std.heap.c_allocator;
 
 pub const g_proto_version: i32 = 1;
 
-pub const S_IFDIR: i32 = 0o0040000; // Directory.
-#define	__S_IFCHR	0o0020000	/* Character device.  */
-#define	__S_IFBLK	0o0060000	/* Block device.  */
-pub const S_IFREG: i32 = 0o0100000;
-pub const S_IFIFO: i32 = 0o0010000;
+pub const S_IFMT: u32   = 0o0170000; // These bits determine file type
+// file types
+pub const S_IFDIR: u32  = 0o0040000; // Directory
+pub const S_IFCHR: u32  = 0o0020000; // Character device
+pub const S_IFBLK: u32  = 0o0060000; // Block device
+pub const S_IFREG: u32  = 0o0100000; // Regular file
+pub const S_IFIFO: u32  = 0o0010000; // FIFO
+pub const S_IFLNK: u32  = 0o0120000; // Symbolic link
+pub const S_IFSOCK: u32 = 0o0140000; // Socket
 
-#define	__S_IFIFO	0010000	/* FIFO.  */
-#define	__S_IFLNK	0120000	/* Symbolic link.  */
-#define	__S_IFSOCK	0140000	/* Socket.  */
+pub const ENOENT: i32   = 2;
+pub const EACCES: i32   = 13;
+pub const ENOTDIR: i32  = 20;
+pub const EISDIR: i32   = 21;
 
-
-
-pub const MyFuseError = enum(i32)
+pub const sout_info_t = struct
 {
-    ENOENT      = 2,
-    EACCES      = 13,
-    ENOTDIR     = 20,
-    EISDIR      = 21,
+    out_data_slice: [64 * 1024]u8 = undefined,
+    msg_size: usize = 0,
+    sent: usize = 0,
+    next: ?*sout_info_t = null,
+
+    //*************************************************************************
+    pub fn init(self: *sout_info_t) !void
+    {
+        try log.logln_devel(log.LogLevel.info, @src(),
+                "sout_info_t", .{});
+        self.* = .{};
+    }
+
+    //*************************************************************************
+    pub fn deinit(self: *sout_info_t) void
+    {
+        log.logln_devel(log.LogLevel.info, @src(),
+                "sout_info_t", .{}) catch return;
+        _ = self;
+    }
+
 };
 
 pub const MyFuseMsg = enum(u16)
@@ -63,8 +83,8 @@ pub const MyFuseReplyMsg = enum(u16)
     write       = 4,
     buf         = 5,
     buf_dir     = 105,
-    iov         = 6,
-    data        = 7,
+    iov         = 6,        // ?
+    data        = 7,        // ?
     open        = 8,
     entry       = 9,
     err         = 10,
@@ -278,17 +298,3 @@ pub const MyStatVfs = struct
     }
 
 };
-
-const expect = std.testing.expect;
-
-//*****************************************************************************
-test "f64_to_f64"
-{
-    //const s = parse.parse_t.create(std.heap.DebugAllocator, 1024);
-    //defer s.delete();
-    const valf64: f64 = 10.789;
-    const valf64_array = std.mem.toBytes(valf64);
-    std.debug.print("type {}\n", .{@TypeOf(valf64_array)});
-    const valf64a = std.mem.bytesAsValue(f64, &valf64_array).*;
-    try expect(valf64 == valf64a);
-}

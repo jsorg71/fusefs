@@ -161,37 +161,6 @@ myfuse_check_fds(void* obj)
 }
 
 //*****************************************************************************
-struct fuse_bufvec*
-myfuse_bufvec_create(size_t count)
-{
-    if (count == 0)
-    {
-        return NULL;
-    }
-    if (count == 1)
-    {
-        return (struct fuse_bufvec*)calloc(1, sizeof(struct fuse_bufvec));
-    }
-    return (struct fuse_bufvec*)calloc(1, sizeof(struct fuse_bufvec) +
-            sizeof(struct fuse_buf) * count);
-}
-
-//*****************************************************************************
-void
-myfuse_bufvec_delete(struct fuse_bufvec* bufv)
-{
-    free(bufv);
-}
-
-//*****************************************************************************
-void
-myfuse_bufvec_set(struct fuse_bufvec* bufv, size_t index,
-        struct fuse_buf* buf)
-{
-    bufv->buf[index] = *buf;
-}
-
-//*****************************************************************************
 void
 myfuse_file_info_get(struct fuse_file_info* fi, int32_t* flags,
         uint32_t* padding, uint64_t* fh, uint64_t* lock_owner,
@@ -209,13 +178,10 @@ myfuse_file_info_get(struct fuse_file_info* fi, int32_t* flags,
     val = fi->flock_release;            lpadding |= val << 5;
     val = fi->cache_readdir;            lpadding |= val << 6;
     val = fi->noflush;                  lpadding |= val << 7;
-    //val = fi->parallel_direct_writes;   lpadding |= val << 8;
     *padding = lpadding;
     *fh = fi->fh;
     *lock_owner = fi->lock_owner;
     *poll_events = fi->poll_events;
-    *backing_id = 0; // fi->backing_id;
-    *compat_flags = 0; // fi->compat_flags;
 }
 
 //*****************************************************************************
@@ -240,12 +206,9 @@ myfuse_file_info_create(int32_t flags,
     fi->flock_release           = (padding >> 5) & 1;
     fi->cache_readdir           = (padding >> 6) & 1;
     fi->noflush                 = (padding >> 7) & 1;
-    //fi->parallel_direct_writes  = (padding >> 8) & 1;
     fi->fh = fh;
     fi->lock_owner = lock_owner;
     fi->poll_events = poll_events;
-    //fi->backing_id = backing_id;
-    //fi->compat_flags = compat_flags;
     return fi;
 }
 
