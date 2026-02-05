@@ -177,7 +177,6 @@ myfuse_file_info_get(struct fuse_file_info* fi, int32_t* flags,
     val = fi->nonseekable;              lpadding |= val << 4;
     val = fi->flock_release;            lpadding |= val << 5;
     val = fi->cache_readdir;            lpadding |= val << 6;
-    val = fi->noflush;                  lpadding |= val << 7;
     *padding = lpadding;
     *fh = fi->fh;
     *lock_owner = fi->lock_owner;
@@ -205,7 +204,6 @@ myfuse_file_info_create(int32_t flags,
     fi->nonseekable             = (padding >> 4) & 1;
     fi->flock_release           = (padding >> 5) & 1;
     fi->cache_readdir           = (padding >> 6) & 1;
-    fi->noflush                 = (padding >> 7) & 1;
     fi->fh = fh;
     fi->lock_owner = lock_owner;
     fi->poll_events = poll_events;
